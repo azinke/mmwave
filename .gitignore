@@ -1,0 +1,7 @@
+# Build folder
+output/
+
+.vscode
+
+# Generated documentation folder
+html/
