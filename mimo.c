@@ -33,5 +33,8 @@ void CloseTraceFile() {
  */
 int main (int argc, char *argv[]) {
   printf("MMWave MIMO Application\n");
+  int status = MMWL_TDAInit();
+  msleep(2000);
+  ethernetDisconnect();
   return 0;
 }

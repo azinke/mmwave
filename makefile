@@ -11,26 +11,26 @@ ROOT_DIR = ti
 MMWLINK_IDIR = ${ROOT_DIR}/mmwavelink/src
 
 mmwlink:
-  ${CC} -c -Wall ${MMWLINK_IDIR}/*.c
+	${CC} -c -Wall ${MMWLINK_IDIR}/*.c
 
 
 # MMWave Ethernet
 MMWETH_IDIR = ${ROOT_DIR}/ethernet/src
 
 mmwethernet:
-  ${CC} -c ${MMWETH_IDIR}/*.c
+	${CC} -c ${MMWETH_IDIR}/*.c
 
 
 mmwave: mmwlink mmwethernet
-  ${CC} -c ${ROOT_DIR}/mmwave
+	${CC} -c ${ROOT_DIR}/mmwave/*.c
 
 # Build all
 all: mmwlink mmwethernet mmwave
-  ${CC} -c *.c
-  ${CC} -o app *.o
+	${CC} -c *.c
+	${CC} -o app *.o
 
 build: all
 
 clean:
-  @rm *.o
-  @rm app
+	@rm *.o
+	@rm app
