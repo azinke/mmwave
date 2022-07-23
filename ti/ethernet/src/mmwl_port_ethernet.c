@@ -94,8 +94,7 @@ uint32_t magicWord = 0;
 * Function used for logging the messages
 */
 #if defined(DEBUG) && DEBUG > 0
- #define DEBUG_PRINT(fmt, args...) \
-  fprintf(stderr, "DEBUG: %s:%d:%s(): " fmt, __FILE__, __LINE__, __func__, ##args)
+ #define DEBUG_PRINT(fmt, args...) fprintf(stderr, "DEBUG: " fmt, ##args)
 #else
  #define DEBUG_PRINT(fmt, args...) /* Don't do anything in release builds */
 #endif
@@ -121,12 +120,10 @@ void* Network_waitConnect(void* lpParam) {
     int32_t status = Network_waitRead(&gNetwork_SockObj);
 
     /* If information is available */
-    if (status == 1)
-    {
+    if (status == 1) {
       /* Read header response */
       int32_t response = RecvResponse(&prmSize);
-      if (response != SYSTEM_LINK_STATUS_SOK)
-      {
+      if (response != SYSTEM_LINK_STATUS_SOK) {
         /* Notify mmWaveStudio about network error */
         gTDACARD_Callback(1, CAPTURE_RESPONSE_NETWORK_ERROR, 0, response, NULL);
         break;
@@ -456,8 +453,7 @@ STATUS ethernetConnect(unsigned char *ipAddr, uint32_t configPort, uint32_t devi
 
   //Send TDA version command
   status = readDLLVersion();
-  if (status != SYSTEM_LINK_STATUS_SOK)
-  {
+  if (status != SYSTEM_LINK_STATUS_SOK) {
     DEBUG_PRINT("# ERROR: TDA version command failed\n");
     return SYSTEM_LINK_STATUS_EFAIL;
   }
@@ -2242,7 +2238,7 @@ int SendCommand(void *params, int prmSize) {
   status = Network_write(&gNetwork_SockObj, (uint8_t*)&cmdHeader, sizeof(cmdHeader));
   if (status < 0) {
     DEBUG_PRINT("# ERROR: Could not write header\n");
-        return status;
+    return status;
   }
 
   status = Network_write(&gNetwork_SockObj, (uint8_t*)params, prmSize);

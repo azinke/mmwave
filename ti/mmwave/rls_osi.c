@@ -252,7 +252,7 @@ int osiExecute(rlsSpawnEntryFunc_t pEntry , const void* pValue , unsigned int fl
 	te->entryFunc = pEntry;
 	te->pParam = pValue;
 	pthread_create(&ThreadHdl, NULL, ExecuteEntryFunc, te);
-	sleep(1);
+	msleep(1);
 	return 0;
 }
 

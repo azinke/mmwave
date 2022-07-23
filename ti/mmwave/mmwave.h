@@ -176,6 +176,47 @@ typedef struct rlDevGlobalCfg {
 } rlDevGlobalCfg_t;
 
 
+/**
+ * @brief Configuration for Arming the TDA for recording
+ * 
+ */
+typedef struct rlTdaArmCfg {
+
+  /**
+   * @brief Expected periodicity of the recording in ms
+   * 
+   */
+  unsigned int framePeriodicity;
+
+  /**
+   * @brief Directory that would hold the recorded data
+   * 
+   */
+  unsigned char* captureDirectory;
+
+  /**
+   * @brief Number of 2Gb files to pre-allocate for the recordings
+   * 
+   */
+  unsigned int numberOfFilesToAllocate;
+
+  /**
+   * @brief Type of data packing used for the recording
+   *        0: 16-bit data packing
+   *        1: 12-bit data packing
+   * 
+   */
+  unsigned int dataPacking;
+
+  /**
+   * @brief Number of frames to capture
+   * 
+   */
+  unsigned int numberOfFramesToCapture;
+
+} rlTdaArmCfg_t;
+
+
 /******************************************************************************
 * FUNCTION DECLARATION
 *******************************************************************************
@@ -186,9 +227,11 @@ int MMWL_powerOff(unsigned char deviceMap);
 
 /*sensor stop*/
 int MMWL_sensorStop(unsigned char deviceMap);
+int MMWL_StopFrame(unsigned int deviceMap);
 
 /*Sensor start*/
 int MMWL_sensorStart(unsigned char deviceMap);
+int MMWL_StartFrame(unsigned int deviceMap);
 
 /*Frame configuration*/
 int MMWL_frameConfig(
@@ -228,12 +271,14 @@ int MMWL_ApllSynthBwConfig(unsigned char deviceMap);
 
 /*Channle, ADC and Dataformat configuration API's*/
 int MMWL_basicConfiguration(unsigned char deviceMap,
-                            rlAdcOutCfg_t adcOutCfgArgs, rlDevDataFmtCfg_t dataFmtCfgArgs);
+                            rlAdcOutCfg_t adcOutCfgArgs,
+                            rlDevDataFmtCfg_t dataFmtCfgArgs,
+                            rlRfLdoBypassCfg_t ldoCfgArgs);
 int MMWL_channelConfig(unsigned char deviceMap, unsigned short cascade, rlChanCfg_t rfChanCfgArgs);
-int MMWL_ldoBypassConfig(unsigned char deviceMap);
+int MMWL_ldoBypassConfig(unsigned char deviceMap, rlRfLdoBypassCfg_t rfLdoBypassCfgArgs);
 int MMWL_adcOutConfig(unsigned char deviceMap, rlAdcOutCfg_t adcOutCfgArgs);
 int MMWL_dataFmtConfig(unsigned char deviceMap, rlDevDataFmtCfg_t dataFmtCfgArgs);
-int MMWL_setMiscConfig(unsigned char deviceMap);
+int MMWL_setMiscConfig(unsigned char deviceMap, rlRfMiscConf_t miscCfg);
 
 /*RFenable API*/
 int MMWL_rfEnable(unsigned char deviceMap);
@@ -254,11 +299,23 @@ int MMWL_fileWrite(unsigned char deviceMap, unsigned short remChunks,
 /* Load Phase shifter Calibration Data from a file */
 // int MMWL_LoadPhShiftCalibDataFromFile(unsigned char deviceMap);
 
+/** Power up device */
+int MMWL_DevicePowerUp(unsigned int deviceMap);
+
 /*Poweron Master*/
 int MMWL_powerOnMaster(unsigned char deviceMap);
 
-int MMWL_TDAInit();
+/** Connect to ethernet and init TDA */
+int MMWL_TDAInit(unsigned char *ipAddr, unsigned int port, uint8_t deviceMap);
 
+/** Setup the TDA for recording */
+int MMWL_ArmingTDA(rlTdaArmCfg_t tdaArmCfgArgs);
+
+/** Notify signal to stop recording */
+int MMWL_DeArmingTDA();
+
+/** Assign device map */
+int MMWL_AssignDeviceMap(uint8_t deviceMap, uint8_t* masterMap, uint8_t* slavesMap);
 
 uint64_t computeCRC(uint8_t *p, uint32_t len, uint8_t width);
 

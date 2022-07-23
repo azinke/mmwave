@@ -1,20 +1,5 @@
 #include "mmwave.h"
 
-
-/****************************************************************************************
-* USER CONFIGURABLE DEFINITIONS
-****************************************************************************************
-*/
-
-// TDA2xx IP Address
-static char mmwl_TDA_IPAddress[] = "192.168.33.180";
-
-// TDA2 Configuration Port
-static unsigned short mmwl_TDA_ConfigPort = 5001U;
-
-// Capture Directory
-static char mmwl_TDA_CaptureDirectory[] = "/mnt/ssd/MMWL_Capture";
-
 /******************************************************************************
 * GLOBAL VARIABLES/DATA-TYPES DEFINITIONS
 ******************************************************************************
@@ -33,16 +18,8 @@ static unsigned char mmwl_bGpadcDataRcv = 0U;
 static unsigned char mmwl_bMssCpuFault = 0U;
 static unsigned char mmwl_bMssEsmFault = 0U;
 
-static unsigned char mmwl_TDA_DeviceMapCascadedMaster = 0U;
-static unsigned char mmwl_TDA_DeviceMapCascadedSlaves = 0U;
-static unsigned char mmwl_TDA_DeviceMapCascadedAll = 0U;
-static unsigned char mmwl_TDA_SlavesEnabled[3] = { 0 };
 static unsigned int mmwl_TDA_width[4] = { 0 };
 static unsigned int mmwl_TDA_height[4] = { 0 };
-static unsigned int mmwl_TDA_framePeriodicity = 0;
-static unsigned int mmwl_TDA_numAllocatedFiles = 0;
-static unsigned int mmwl_TDA_enableDataPacking = 0;
-static unsigned int mmwl_TDA_numFramesToCapture = 0;
 
 static unsigned char mmwl_bTDA_CaptureCardConnect = 0U;
 static unsigned char mmwl_bTDA_CreateAppACK = 0U;
@@ -72,33 +49,12 @@ unsigned int gContStreamTime = 0;
 /* store continous streaming sampling rate */
 unsigned int gContStreamSampleRate = 0;
 
-/* SPI Communication handle to AWR2243 device*/
-rlComIfHdl_t mmwl_devHdl = NULL;
-
-/* structure parameters of two profile confing and cont mode config are same */
-// rlProfileCfg_t profileCfgArgs[2] = { 0 };
-
-/* structure parameters of four profile confing of Adv chirp */
-rlProfileCfg_t ProfileCfgArgs;
-
-/* Chirp configuration */
-rlChirpCfg_t chirpConfig;
 
 /* Strcture to store async event config */
 rlRfDevCfg_t rfDevCfg = { 0x0 };
 
 /* Structure to store GPADC measurement data sent by device */
 rlRecvdGpAdcData_t rcvGpAdcData = {0};
-
-/* calibData is the calibration data sent by the device which needs to store to
-   sFlash and will be used for factory calibration or embedded in the application itself */
-rlCalibrationData_t calibData = { 0 };
-rlPhShiftCalibrationData_t phShiftCalibData = { 0 };
-
-/* File Handle for Calibration Data */
-FILE *CalibrationDataPtr = NULL;
-FILE *PhShiftCalibrationDataPtr = NULL;
-
 
 /* Thread return values */
 rlReturnVal_t threadRetVal[TDA_NUM_CONNECTED_DEVICES_MAX];
@@ -364,7 +320,6 @@ void* threadHandler(void* lpParam) {
 
 int callThreadApi(unsigned int apiInfo, unsigned int deviceMap, void *apiParams, unsigned int flags) {
   int  retVal = RL_RET_CODE_OK;
-  // uint32_t   dwThreadIdArray[TDA_NUM_CONNECTED_DEVICES_MAX] = { 0 };
   HANDLE  hThreadArray[TDA_NUM_CONNECTED_DEVICES_MAX] = { 0 };
   taskData myTaskData[TDA_NUM_CONNECTED_DEVICES_MAX];
   volatile int devIndex = 0;
@@ -1178,10 +1133,8 @@ int MMWL_dataFmtConfig(unsigned char deviceMap, rlDevDataFmtCfg_t dataFmtCfgArgs
 /* SourceId :  */
 /* DesignId :  */
 /* Requirements :  */
-int MMWL_ldoBypassConfig(unsigned char deviceMap) {
+int MMWL_ldoBypassConfig(unsigned char deviceMap, rlRfLdoBypassCfg_t rfLdoBypassCfgArgs) {
   int retVal = RL_RET_CODE_OK;
-  rlRfLdoBypassCfg_t rfLdoBypassCfgArgs = { 0 };
-
   printf(
     "Device map %u : Calling rlRfSetLdoBypassConfig With Bypass [%d] \n\n",
     deviceMap, rfLdoBypassCfgArgs.ldoBypassEnable
@@ -1289,14 +1242,9 @@ int MMWL_channelConfig(unsigned char deviceMap, unsigned short cascade, rlChanCf
 *
 *   Sets misc feature such as per chirp phase shifter and Advance chirp
 */
-int MMWL_setMiscConfig(unsigned char deviceMap) {
+int MMWL_setMiscConfig(unsigned char deviceMap, rlRfMiscConf_t miscCfg) {
   int32_t retVal;
-  rlRfMiscConf_t MiscCfg = { 0 };
-  /* Enable Adv chirp feature 
-    b0 PERCHIRP_PHASESHIFTER_EN
-    b1 ADVANCE_CHIRP_CONFIG_EN  */
-  MiscCfg.miscCtl = 0x3;
-  retVal = CALL_API(RF_SET_MISC_CONFIG_IND, deviceMap, &MiscCfg, 0);
+  retVal = CALL_API(RF_SET_MISC_CONFIG_IND, deviceMap, &miscCfg, 0);
   return retVal;
 }
 
@@ -1332,7 +1280,8 @@ int MMWL_setDeviceCrcType(unsigned char deviceMap) {
 *   Channel, ADC,Data format configuration API.
 */
 int MMWL_basicConfiguration(unsigned char deviceMap,
-        rlAdcOutCfg_t adcOutCfgArgs, rlDevDataFmtCfg_t dataFmtCfgArgs) {
+        rlAdcOutCfg_t adcOutCfgArgs,
+        rlDevDataFmtCfg_t dataFmtCfgArgs, rlRfLdoBypassCfg_t ldoCfgArgs) {
   int retVal = RL_RET_CODE_OK;
 
   /* ADC out data format configuration */
@@ -1362,7 +1311,7 @@ int MMWL_basicConfiguration(unsigned char deviceMap,
   }
 
   /* LDO bypass configuration */
-  retVal = MMWL_ldoBypassConfig(deviceMap);
+  retVal = MMWL_ldoBypassConfig(deviceMap, ldoCfgArgs);
   if (retVal != RL_RET_CODE_OK) {
     printf(
       "Device map %u : LDO Bypass Config failed with error code %d\n\n",
@@ -1557,10 +1506,6 @@ int MMWL_frameConfig(unsigned char deviceMap, rlFrameCfg_t frameCfgArgs, rlChanC
   framePeriodicity = (frameCfgArgs.framePeriodicity * 5)/(1000*1000);
   frameCount = frameCfgArgs.numFrames;
 
-  if (deviceMap == 1) {
-    mmwl_TDA_framePeriodicity = framePeriodicity;
-  }
-
   /* In Adv chirp context, frame start and frame end index is not used, the number 
      of chirps is taken from number of loops */
   if (rlDevGlobalCfgArgs.LinkAdvChirpTest == TRUE) {
@@ -1644,7 +1589,7 @@ int MMWL_frameConfig(unsigned char deviceMap, rlFrameCfg_t frameCfgArgs, rlChanC
 /** @fn int MMWL_dataPathConfig(unsigned char deviceMap)
 *
 *   @brief Data path configuration API. Configures CQ data size on the
-*           lanes and number of samples of CQ[0-2] to br transferred.
+*           lanes and number of samples of CQ[0-2] to be transferred.
 *
 *   @param[in] deviceMap - Devic Index
 *   @param[in] dataPathCfgArgs - Data path configuration
@@ -1652,7 +1597,7 @@ int MMWL_frameConfig(unsigned char deviceMap, rlFrameCfg_t frameCfgArgs, rlChanC
 *   @return int Success - 0, Failure - Error Code
 *
 *   Data path configuration API. Configures CQ data size on the
-*   lanes and number of samples of CQ[0-2] to br transferred.
+*   lanes and number of samples of CQ[0-2] to be transferred.
 */
 int MMWL_dataPathConfig(unsigned char deviceMap, rlDevDataPathCfg_t dataPathCfgArgs) {
   int retVal = RL_RET_CODE_OK;
@@ -1663,7 +1608,7 @@ int MMWL_dataPathConfig(unsigned char deviceMap, rlDevDataPathCfg_t dataPathCfgA
   );
 
   /* same API is used to configure CQ data size on the
-    * lanes and number of samples of CQ[0-2] to br transferred.
+    * lanes and number of samples of CQ[0-2] to be transferred.
     */
   retVal = CALL_API(SET_DATA_PATH_CONFIG_IND, deviceMap, &dataPathCfgArgs, 0);
   return retVal;
@@ -2011,7 +1956,6 @@ int MMWL_StopFrame(unsigned int deviceMap) {
 */
 int MMWL_powerOff(unsigned char deviceMap) {
   int retVal = RL_RET_CODE_OK;
-  mmwl_devHdl = NULL;
 
   if (deviceMap == 1) {
     retVal = rlDevicePowerOff();
@@ -2096,7 +2040,7 @@ int MMWL_ApllSynthBwConfig(unsigned char deviceMap) {
 /**
  * @brief Power up device
  * 
- * @param deviceMap - Devic Index
+ * @param deviceMap - Device Index
  * @return int 
  */
 int MMWL_DevicePowerUp(unsigned int deviceMap) {
@@ -2177,8 +2121,7 @@ int MMWL_DevicePowerUp(unsigned int deviceMap) {
       while ((mmwl_bInitComp & deviceMap) != deviceMap) {
         msleep(1); //Sleep 1 msec
         timeoutCnt++;
-        if (timeoutCnt > MMWL_API_INIT_TIMEOUT)
-        {
+        if (timeoutCnt > MMWL_API_INIT_TIMEOUT) {
           CALL_API(API_TYPE_B | REMOVE_DEVICE_IND, deviceMap, NULL, 0);
           retVal = RL_RET_CODE_RESP_TIMEOUT;
           break;
@@ -2207,26 +2150,27 @@ int MMWL_DevicePowerUp(unsigned int deviceMap) {
 
 
 /**
- * @brief Arm the TDA for recording
+ * @brief Prepare the TDA board and notify TDA about the start of recording
  * 
+ * @param tdaArmCfgArgs Config setup to arm the TDA for recording 
  * @return int 
  */
-int MMWL_ArmingTDA() {
+int MMWL_ArmingTDA(rlTdaArmCfg_t tdaArmCfgArgs) {
   int retVal = RL_RET_CODE_OK;
   int timeOutCnt = 0U;
 
   mmwl_bTDA_FramePeriodicityACK = 0U;
   /* Send frame periodicity for syncing the data being received at VIP ports */
-  retVal = sendFramePeriodicitySync(mmwl_TDA_framePeriodicity);
+  retVal = sendFramePeriodicitySync(tdaArmCfgArgs.framePeriodicity);
   if (retVal != RL_RET_CODE_OK) {
     printf(
       "ERROR: Sending framePeriodicity = %u failed with error code %d \n\n",
-      mmwl_TDA_framePeriodicity, retVal
+      tdaArmCfgArgs.framePeriodicity, retVal
     );
     return -1;
   }
   else {
-    printf("INFO: Sending framePeriodicity = %u successful \n\n", mmwl_TDA_framePeriodicity);
+    printf("INFO: Sending framePeriodicity = %u successful \n\n", tdaArmCfgArgs.framePeriodicity);
   }
 
   while (1) {
@@ -2247,16 +2191,16 @@ int MMWL_ArmingTDA() {
   timeOutCnt = 0U;
   mmwl_bTDA_CaptureDirectoryACK = 0U;
   /* Send session's capture directory to TDA */
-  retVal = setSessionDirectory(mmwl_TDA_CaptureDirectory);
+  retVal = setSessionDirectory(tdaArmCfgArgs.captureDirectory);
   if (retVal != RL_RET_CODE_OK) {
     printf(
       "ERROR: Sending capture directory = %s failed with error code %d \n\n",
-      mmwl_TDA_CaptureDirectory, retVal
+      tdaArmCfgArgs.captureDirectory, retVal
     );
     return -1;
   }
   else {
-    printf("INFO: Sending capture directory = %s successful \n\n", mmwl_TDA_CaptureDirectory);
+    printf("INFO: Sending capture directory = %s successful \n\n", tdaArmCfgArgs.captureDirectory);
   }
 
   while (1) {
@@ -2277,18 +2221,18 @@ int MMWL_ArmingTDA() {
   timeOutCnt = 0U;
   mmwl_bTDA_FileAllocationACK = 0U;
   /* Send number of files to be pre-allocated to TDA */
-  retVal = sendNumAllocatedFiles(mmwl_TDA_numAllocatedFiles);
+  retVal = sendNumAllocatedFiles(tdaArmCfgArgs.numberOfFilesToAllocate);
   if (retVal != RL_RET_CODE_OK) {
     printf(
       "ERROR: Sending pre-allocated files = %u failed with error code %d \n\n",
-      mmwl_TDA_numAllocatedFiles, retVal
+      tdaArmCfgArgs.numberOfFilesToAllocate, retVal
     );
     return -1;
   }
   else {
     printf(
       "INFO: Sending pre-allocated files = %u successful \n\n",
-      mmwl_TDA_numAllocatedFiles
+      tdaArmCfgArgs.numberOfFilesToAllocate
     );
   }
 
@@ -2310,18 +2254,18 @@ int MMWL_ArmingTDA() {
   timeOutCnt = 0U;
   mmwl_bTDA_DataPackagingACK = 0U;
   /* Send enable Data packing (0 : 16-bit, 1 : 12-bit) to TDA */
-  retVal = enableDataPackaging(mmwl_TDA_enableDataPacking);
+  retVal = enableDataPackaging(tdaArmCfgArgs.dataPacking);
   if (retVal != RL_RET_CODE_OK) {
     printf(
       "ERROR: Sending enable data packing = %u failed with error code %d \n\n",
-      mmwl_TDA_enableDataPacking, retVal
+      tdaArmCfgArgs.dataPacking, retVal
     );
     return -1;
   }
   else {
     printf(
       "INFO: Sending enable data packing = %u successful \n\n",
-      mmwl_TDA_enableDataPacking
+      tdaArmCfgArgs.dataPacking
     );
   }
 
@@ -2343,18 +2287,18 @@ int MMWL_ArmingTDA() {
   timeOutCnt = 0U;
   mmwl_bTDA_NumFramesToCaptureACK = 0U;
   /* Send number of frames to be captured by TDA */
-  retVal = NumFramesToCapture(mmwl_TDA_numFramesToCapture);
+  retVal = NumFramesToCapture(tdaArmCfgArgs.numberOfFramesToCapture);
   if (retVal != RL_RET_CODE_OK) {
     printf(
       "ERROR: Sending number of frames to capture = %u failed with error code %d \n\n",
-      mmwl_TDA_numFramesToCapture, retVal
+      tdaArmCfgArgs.numberOfFramesToCapture, retVal
     );
     return -1;
   }
   else {
     printf(
       "INFO: Sending number of frames to capture = %u successful \n\n",
-      mmwl_TDA_numFramesToCapture
+      tdaArmCfgArgs.numberOfFramesToCapture
     );
   }
 
@@ -2499,11 +2443,14 @@ int MMWL_DeviceDeInit(unsigned int deviceMap) {
 
 
 /**
- * @brief 
+ * @brief Connect to ethernet and init TDA board
  * 
- * @return int 
+ * @param ipAddr IP Address of the TDA board (default: 192.168.33.30)
+ * @param port Port number to communication with the TDA (default: 5001)
+ * @param deviceMap All cascaded device map
+ * @return int Initialization status
  */
-int MMWL_TDAInit() {
+int MMWL_TDAInit(unsigned char *ipAddr, unsigned int port, uint8_t deviceMap) {
   int retVal = RL_RET_CODE_OK;
   int timeOutCnt = 0;
 
@@ -2522,10 +2469,7 @@ int MMWL_TDAInit() {
 
   mmwl_bTDA_CaptureCardConnect = 0U;
   /* Connect to the TDA Capture card */
-  retVal = ethernetConnect(
-    mmwl_TDA_IPAddress, mmwl_TDA_ConfigPort,
-    mmwl_TDA_DeviceMapCascadedAll
-  );
+  retVal = ethernetConnect(ipAddr, port, deviceMap);
   if (retVal != RL_RET_CODE_OK) {
     printf(
       "ERROR: Connecting to TDA failed with error %d. Check whether the capture card is connected to the network! \n\n",
@@ -2561,26 +2505,21 @@ int MMWL_TDAInit() {
  * 
  * @return int 
  */
-int MMWL_AssignDeviceMap(rlDevGlobalCfg_t rlDevGlobalCfgArgs) {
+int MMWL_AssignDeviceMap(uint8_t deviceMap, uint8_t* masterMap, uint8_t* slavesMap) {
   int retVal = RL_RET_CODE_OK;
-  unsigned char deviceMap = rlDevGlobalCfgArgs.CascadeDeviceMap;
   unsigned char devId = 0;
 
   if ((deviceMap & 1) == 0) {
     return RL_RET_CODE_INVALID_INPUT;
   }
 
-  for (devId = 0; devId < 4; devId++) {
+  // ID 0: master
+  *masterMap = 1;
+
+  // ID 1-3: slaves
+  for (devId = 1; devId < 4; devId++) {
     if ((deviceMap & (1 << devId)) != 0) {
-      if (devId == 0) {
-        mmwl_TDA_DeviceMapCascadedMaster |= (1 << devId);
-        mmwl_TDA_DeviceMapCascadedAll |= (1 << devId);
-      }
-      else {
-        mmwl_TDA_SlavesEnabled[devId - 1] = 1;
-        mmwl_TDA_DeviceMapCascadedSlaves |= (1 << devId);
-        mmwl_TDA_DeviceMapCascadedAll |= (1 << devId);
-      }
+      *slavesMap |= (1 << devId);
     }
   }
 
