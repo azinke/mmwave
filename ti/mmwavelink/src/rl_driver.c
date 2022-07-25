@@ -2634,7 +2634,7 @@ rlReturnVal_t rlDriverCmdSendRetry(rlUInt8_t devIndex, rlDriverMsg_t* outMsg)
     rlReturnVal_t retVal;
     rlDriverData_t *rlDrvData = rlDriverGetHandle();
 
-    if (rlDrvData == RL_NULL)
+    if (rlDrvData == NULL)
     {
         retVal = RL_RET_CODE_FATAL_ERROR;
     }

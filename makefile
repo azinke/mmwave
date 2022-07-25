@@ -28,9 +28,10 @@ mmwave: mmwlink mmwethernet
 all: mmwlink mmwethernet mmwave
 	${CC} -c *.c
 	${CC} -o mimo.app *.o
+	@rm -f *.o
 
 build: all
 
 clean:
-	@rm *.o
-	@rm *.app
+	@rm -f *.o
+	@rm -f *.app

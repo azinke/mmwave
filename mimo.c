@@ -13,7 +13,7 @@
  */
 #include "ti/mmwave/mmwave.h"
 
-#define NUM_CHRIPS 12
+#define NUM_CHRIPS 16
 
 
 /** Device configuration */
@@ -95,7 +95,7 @@ const rlFrameCfg_t frameCfgArgs = {
   .chirpStartIdx = 0,
   .chirpEndIdx = 11,
   .numFrames = 100,               // (0 for infinite)
-  .numLoops = 12,
+  .numLoops = NUM_CHRIPS,
   .numAdcSamples = 2 * 256,       // Complex samples (for I and Q siganls)
   .frameTriggerDelay = 0x0,
   .framePeriodicity = 20000000,   // 100ms | 1LSB = 5ns
@@ -262,7 +262,11 @@ uint32_t initMaster(rlChanCfg_t channelCfg, rlAdcOutCfg_t adcOutCfg) {
       if (status != 0)
         printf("[MASTER] ADC output format configuration failed!\n");
       else printf("[MASTER] ADC output format successfully configured\n");
+    } else {
+      printf("[MASTER] Error: Failed to upload firmware!\n");
     }
+  } else {
+    printf("[MASTER] Error: Failed to power up device!\n");
   }
   printf("[MASTER] Init completed\n\n");
   return status;
@@ -327,7 +331,7 @@ uint32_t configure (devConfig_t config) {
   }
 
   // Master frame config.
-  config.frameCfg.triggerSelect = 2;    // Hardware trigger
+  config.frameCfg.triggerSelect = 1;    // Software trigger
   MMWL_frameConfig(
     config.masterMap,
     config.frameCfg,
@@ -338,7 +342,7 @@ uint32_t configure (devConfig_t config) {
   );
   // Slaves frame config
   // Master frame config.
-  config.frameCfg.triggerSelect = 1;    // Software trigger
+  config.frameCfg.triggerSelect = 2;    // Hardware trigger
   MMWL_frameConfig(
     config.slavesMap,
     config.frameCfg,
