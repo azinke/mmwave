@@ -13,7 +13,18 @@
  */
 #include "ti/mmwave/mmwave.h"
 
+/* Enable development environment
+  Status messages are printed. Set to '0' to disable the
+  development environment. Hence, no status feedback will
+  be printed
+*/
+#define DEV_ENV    1
+
 #define NUM_CHRIPS 16
+
+#define CRED      "\e[0;31m"    // Terminal code for regular red text
+#define CGREEN    "\e[0;32m"    // Terminal code for regular greed text
+#define CRESET    "\e[0m"       // Clear reset terminal color
 
 
 /** Device configuration */
@@ -191,7 +202,7 @@ rlDevCsi2Cfg_t csi2LaneCfgArgs = {
  * @brief Check if a value is in the table provided in argument
  *
  * @param value Value to look for in the table
- * @param table Tbale defining the search context
+ * @param table Table defining the search context
  * @param size Size of the table
  * @return int8_t
  *      Return the index where the match has been found. -1 if not found
@@ -212,33 +223,73 @@ int8_t is_in_table(uint8_t value, uint8_t *table, uint8_t size) {
  * @return uint32_t Configuration status
  */
 uint32_t configureMimoChirp(uint8_t devId, rlChirpCfg_t chirpCfg) {
-  static uint8_t chripTxTbale [4][3] = {
+  static uint8_t chripTxTable [4][3] = {
     {11, 10, 9},   // Dev1 - Master
     {8, 7, 6},     // Dev2
     {5, 4, 3},     // Dev3
     {2, 1, 0},     // Dev4
   };
-  int status = -1;
+  int status = 0;
 
   for (uint8_t i = 0; i < NUM_CHRIPS; i++) {
-    int8_t txIdx = is_in_table(i, chripTxTbale[devId], 3);
+    int8_t txIdx = is_in_table(i, chripTxTable[devId], 3);
 
     // Update chirp config
     chirpCfg.chirpStartIdx = i;
     chirpCfg.chirpEndIdx = i;
     if (txIdx < 0) chirpCfg.txEnable = 0x00;
     else chirpCfg.txEnable = (1 << txIdx);
-    status = MMWL_chirpConfig(createDevMapFromDevId(devId), chirpCfg);
+    status += MMWL_chirpConfig(createDevMapFromDevId(devId), chirpCfg);
+#if DEV_ENV
     if (status < 0) {
-      printf("Configuration of chirp %d failed!\n", i);
+      DEBUG_PRINT("Configuration of chirp %d failed!\n", i);
       break;
     }
+#endif
   }
   return status;
 }
 
+/**
+ * @brief Check status and print error or success message
+ *
+ * @param status Status value returned by a function
+ * @param success_msg Success message to print when status is 0
+ * @param error_msg Error message to print in case of error
+ * @param deviceMap Device map the check if related to
+ * @param is_required Indicates if the checking stage is required. if so,
+ *                    the program exits in case of failure.
+ * @return uint32_t Configuration status
+ *
+ * @note: Status is considered successful when the status integer is 0.
+ * Any other value is considered a failure.
+ */
+void check(int status, const char *success_msg, const char *error_msg,
+      unsigned char deviceMap, uint8_t is_required) {
+#if DEV_ENV
+  printf("STATUS %d | DEV MAP: %u | ", status, deviceMap);
+#endif
+  if (status == RL_RET_CODE_OK) {
+#if DEV_ENV
+    printf(CGREEN);
+    printf(success_msg);
+    printf(CRESET);
+    printf("\n");
+#endif
+    return;
+  } else {
+#if DEV_ENV
+    printf(CRED);
+    printf(error_msg);
+    printf(CRESET);
+    printf("\n");
+#endif
+    if (is_required != 0) exit(status);
+  }
+}
 
-uint32_t initMaster(rlChanCfg_t channelCfg, rlAdcOutCfg_t adcOutCfg) {
+
+int32_t initMaster(rlChanCfg_t channelCfg, rlAdcOutCfg_t adcOutCfg) {
   const unsigned int masterId = 0;
   const unsigned int masterMap = 1 << masterId;
   int status = 0;
@@ -246,93 +297,141 @@ uint32_t initMaster(rlChanCfg_t channelCfg, rlAdcOutCfg_t adcOutCfg) {
   // master chip
   channelCfg.cascading = 1;
 
-  status = MMWL_DevicePowerUp(masterMap);
-  if (status == 0) {
-    status = MMWL_firmwareDownload(masterMap);
-    if (status == 0) {
-      status = MMWL_rfEnable(masterMap);
-      if (status != 0) printf("[MASTER] Failed to enable master RF\n");
-      else printf("[MASTER] RF successfully enabled\n");
+  status += MMWL_DevicePowerUp(masterMap, 1000, 1000);
+  check(status,
+    "[MASTER] Power up successful!",
+    "[MASTER] Error: Failed to power up device!", masterMap, TRUE);
 
-      status = MMWL_channelConfig(masterMap, 1, channelCfg);
-      if (status != 0) printf("[MASTER] Channels configuration failed!\n");
-      else printf("[MASTER] Channels successfully configured\n");
+  status += MMWL_firmwareDownload(masterMap);
+  check(status,
+    "[MASTER] Firmware successfully uploaded!",
+    "[MASTER] Error: Firmware upload failed!", masterMap, TRUE);
 
-      status = MMWL_adcOutConfig(masterMap, adcOutCfg);
-      if (status != 0)
-        printf("[MASTER] ADC output format configuration failed!\n");
-      else printf("[MASTER] ADC output format successfully configured\n");
-    } else {
-      printf("[MASTER] Error: Failed to upload firmware!\n");
-    }
-  } else {
-    printf("[MASTER] Error: Failed to power up device!\n");
-  }
-  printf("[MASTER] Init completed\n\n");
+  status += MMWL_setDeviceCrcType(masterMap);
+  check(status,
+    "[MASTER] CRC type has been set!",
+    "[MASTER] Error: Unable to set CRC type!", masterMap, TRUE);
+
+  status += MMWL_rfEnable(masterMap);
+  check(status,
+    "[MASTER] RF successfully enabled!",
+    "[MASTER] Error: Failed to enable master RF", masterMap, TRUE);
+
+  status += MMWL_channelConfig(masterMap, channelCfg.cascading, channelCfg);
+  check(status,
+    "[MASTER] Channels successfully configured!",
+    "[MASTER] Error: Channels configuration failed!", masterMap, TRUE);
+
+  status += MMWL_adcOutConfig(masterMap, adcOutCfg);
+  check(status,
+    "[MASTER] ADC output format successfully configured!",
+    "[MASTER] Error: ADC output format configuration failed!", masterMap, TRUE);
+
+  check(status,
+    "[MASTER] Init completed with sucess\n",
+    "[MASTER] Init completed with error", masterMap, TRUE);
   return status;
 }
 
 
-uint32_t initSlaves(rlChanCfg_t channelCfg, rlAdcOutCfg_t adcOutCfg) {
+int32_t initSlaves(rlChanCfg_t channelCfg, rlAdcOutCfg_t adcOutCfg) {
   int status = 0;
+  uint8_t slavesMap = (1 << 1) | (1 << 2) | (1 << 3);
+
+  // slave chip
+  channelCfg.cascading = 2;
+
   for (uint8_t slaveId = 1; slaveId < 4; slaveId++) {
     unsigned int slaveMap = 1 << slaveId;
 
-    // slave chip
-    channelCfg.cascading = 2;
-
-    status = MMWL_DevicePowerUp(slaveMap);
-    if (status == 0) {
-      status = MMWL_firmwareDownload(slaveMap);
-      if (status == 0) {
-        status = MMWL_rfEnable(slaveMap);
-        if (status != 0)
-          printf("[SLAVE %d] Failed to enable master RF\n", slaveId);
-        else
-          printf("[SLAVE %d] RF successfully enabled\n", slaveId);
-
-        status = MMWL_channelConfig(slaveMap, 2, channelCfg);
-        if (status != 0)
-          printf("[SLAVE %d] Channels configuration failed!\n", slaveId);
-        else
-          printf("[SLAVE %d] Channels successfully configured\n", slaveId);
-
-        status = MMWL_adcOutConfig(slaveMap, adcOutCfg);
-        if (status != 0)
-          printf("[SLAVE %d] ADC output format configuration failed!\n", slaveId);
-        else
-          printf("[SLAVE %d] ADC output format successfully configured\n", slaveId);
-      }
-    }
+    status += MMWL_DevicePowerUp(slaveMap, 1000, 1000);
+    check(status,
+      "[SLAVE] Power up successful!",
+      "[SLAVE] Error: Failed to power up device!", slaveMap, TRUE);
   }
-  printf("[SLAVE] Init completed\n\n");
+
+  //Config of all slaves together
+  status += MMWL_firmwareDownload(slavesMap);
+  check(status,
+    "[SLAVE] Firmware successfully uploaded!",
+    "[SLAVE] Error: Firmware upload failed!", slavesMap, TRUE);
+
+  status += MMWL_setDeviceCrcType(slavesMap);
+  check(status,
+    "[SLAVE] CRC type has been set!",
+    "[SLAVE] Error: Unable to set CRC type!", slavesMap, TRUE);
+
+  status += MMWL_rfEnable(slavesMap);
+  check(status,
+    "[SLAVE] RF successfully enabled!",
+    "[SLAVE] Error: Failed to enable master RF", slavesMap, TRUE);
+
+  status += MMWL_channelConfig(slavesMap, channelCfg.cascading, channelCfg);
+  check(status,
+    "[SLAVE] Channels successfully configured!",
+    "[SLAVE] Error: Channels configuration failed!", slavesMap, TRUE);
+
+  status += MMWL_adcOutConfig(slavesMap, adcOutCfg);
+  check(status,
+    "[SLAVE] ADC output format successfully configured!",
+    "[SLAVE] Error: ADC output format configuration failed!", slavesMap, TRUE);
+
+  check(status,
+    "[SLAVE] Init completed with sucess\n",
+    "[SLAVE] Init completed with error", slavesMap, TRUE);
   return status;
 }
 
 
 uint32_t configure (devConfig_t config) {
-  initMaster(config.channelCfg, config.adcOutCfg);
-  initSlaves(config.channelCfg, config.adcOutCfg);
+  int status = 0;
+  status += initMaster(config.channelCfg, config.adcOutCfg);
+  status += initSlaves(config.channelCfg, config.adcOutCfg);
 
-  MMWL_ldoBypassConfig(config.deviceMap, config.ldoCfg);
-  MMWL_lowPowerConfig(config.deviceMap, config.lpmCfg);
-  MMWL_setMiscConfig(config.deviceMap, config.miscCfg);
-  MMWL_rfInit(config.deviceMap);
+  status += MMWL_RFDeviceConfig(config.deviceMap);
+  check(status,
+    "[ALL] RF deivce configured!",
+    "[ALL] RF device configuration failed!", config.deviceMap, TRUE);
 
-  MMWL_dataPathConfig(config.deviceMap, config.datapathCfg);
-  MMWL_hsiClockConfig(config.deviceMap, config.datapathClkCfg, config.hsClkCfg);
-  MMWL_CSI2LaneConfig(config.deviceMap, config.csi2LaneCfg);
+  status += MMWL_ldoBypassConfig(config.deviceMap, config.ldoCfg);
+  check(status,
+    "[ALL] LDO Bypass configuration successful!",
+    "[ALL] LDO Bypass configuration failed!", config.deviceMap, TRUE);
 
-  MMWL_profileConfig(config.deviceMap, config.profileCfg);
+  status += MMWL_lowPowerConfig(config.deviceMap, config.lpmCfg);
+  check(status,
+    "[ALL] Low Power Mode configuration successful!",
+    "[ALL] Low Power Mode configuration failed!", config.deviceMap, TRUE);
+
+  status += MMWL_ApllSynthBwConfig(config.deviceMap);
+  status += MMWL_setMiscConfig(config.deviceMap, config.miscCfg);
+  status += MMWL_rfInit(config.deviceMap);
+  check(status,
+    "[ALL] RF successfully initialized!",
+    "[ALL] RF init failed!", config.deviceMap, TRUE);
+
+  status += MMWL_dataPathConfig(config.deviceMap, config.datapathCfg);
+  status += MMWL_hsiClockConfig(config.deviceMap, config.datapathClkCfg, config.hsClkCfg);
+  status += MMWL_CSI2LaneConfig(config.deviceMap, config.csi2LaneCfg);
+  check(status,
+    "[ALL] Datapath configuration successful!",
+    "[ALL] Datapath configuration failed!", config.deviceMap, TRUE);
+
+  status += MMWL_profileConfig(config.deviceMap, config.profileCfg);
+  check(status,
+    "[ALL] Profile configuration successful!",
+    "[ALL] Profile configuration failed!", config.deviceMap, TRUE);
 
   // MIMO Chirp configuration
   for (uint8_t devId = 0; devId < 4; devId++) {
-    configureMimoChirp(devId, config.chirpCfg);
+    status += configureMimoChirp(devId, config.chirpCfg);
   }
+  check(status,
+    "[ALL] Chirp configuration successful!",
+    "[ALL] Chirp configuration failed!", config.deviceMap, TRUE);
 
   // Master frame config.
-  config.frameCfg.triggerSelect = 1;    // Software trigger
-  MMWL_frameConfig(
+  status += MMWL_frameConfig(
     config.masterMap,
     config.frameCfg,
     config.channelCfg,
@@ -340,10 +439,12 @@ uint32_t configure (devConfig_t config) {
     config.datapathCfg,
     config.profileCfg
   );
+  check(status,
+    "[MASTER] Frame configuration completed!",
+    "[MASTER] Frame configuration failed!", config.masterMap, TRUE);
+
   // Slaves frame config
-  // Master frame config.
-  config.frameCfg.triggerSelect = 2;    // Hardware trigger
-  MMWL_frameConfig(
+  status += MMWL_frameConfig(
     config.slavesMap,
     config.frameCfg,
     config.channelCfg,
@@ -351,8 +452,13 @@ uint32_t configure (devConfig_t config) {
     config.datapathCfg,
     config.profileCfg
   );
+  check(status,
+    "[SLAVE] Frame configuration completed!",
+    "[SLAVE] Frame configuration failed!", config.slavesMap, TRUE);
 
-  printf("[MIMO] Configuration complete!\n\n");
+  check(status,
+    "[MIMO] Configuration completed!",
+    "[MIMO] Configuration completed with error!", config.slavesMap, TRUE);
 }
 
 
@@ -377,7 +483,7 @@ void CloseTraceFile() {
  * @return int 
  */
 int main (int argc, char *argv[]) {
-  printf("MMWave MIMO Application\n");
+  DEBUG_PRINT("MMWave MIMO Application\n");
 
   // Configuration
   devConfig_t config;
@@ -410,33 +516,40 @@ int main (int argc, char *argv[]) {
     .captureDirectory = captureDirectory,
     .framePeriodicity = config.frameCfg.framePeriodicity,
     .numberOfFilesToAllocate = 0,
-    .numberOfFramesToCapture = config.frameCfg.numFrames,
+    .numberOfFramesToCapture = config.frameCfg.numFrames * 4,
     .dataPacking = 0, // 0: 16-bit | 1: 12-bit
   };
 
   // Connect to TDA
   status = MMWL_TDAInit(ipAddr, port, config.deviceMap);
-  if (status != 0) printf("Couldn't connect to TDA board!\n");
-  else printf("Connected!\n\n");
+  check(status,
+    "[MMWCAS-DSP] TDA Connected!",
+    "[MMWCAS-DSP] Couldn't connect to TDA board!\n", 32, TRUE);
 
   // Start configuration
   configure(config);
 
+  msleep(100);
+
   MMWL_ArmingTDA(tdaCfg);
 
-  MMWL_StartFrame(config.slavesMap);
-  MMWL_StartFrame(config.masterMap);
-  sleep(3);
-  MMWL_StopFrame(config.slavesMap);
-  MMWL_StopFrame(config.masterMap);
+  msleep(1000);
+
+  // Start framing
+  for (int i = 3; i >=0; i--) {
+    MMWL_StartFrame(1U << i);
+  }
+  // MMWL_StartFrame(config.masterMap);
+  msleep(4000);
+
+  // Stop framing
+  for (int i = 3; i >= 0; i--) {
+    MMWL_StopFrame(1U << i);
+  }
+  // MMWL_StopFrame(config.masterMap);
 
   MMWL_DeArmingTDA();
-  // power off device
-
-  /*
-  int status = MMWL_TDAInit();
   msleep(2000);
-  ethernetDisconnect();
-  */
+  // power off device
   return 0;
 }

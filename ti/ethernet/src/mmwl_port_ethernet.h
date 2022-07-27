@@ -91,8 +91,8 @@ extern "C" {
 #include <net/if.h>
 #include <netinet/tcp.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include <string.h>
-#include "event.h"
 #include "mtime.h"
 
 #define getError() (errno)
@@ -264,6 +264,16 @@ typedef uint8_t BOOLEAN;
 #define RLS_RET_CODE_EFAIL                          (-1)
 
 #define DEBUG 1
+
+/*! \brief
+* Function used for logging the messages
+*/
+#if defined(DEBUG) && DEBUG > 0
+  #define DEBUG_PRINT(fmt, args...)\
+    fprintf(stderr, "DEBUG [%s:%d]: " fmt, __FILE__, __LINE__, ##args)
+#else
+ #define DEBUG_PRINT(fmt, args...) /* Don't do anything in release builds */
+#endif
 
 /******************************************************************************
  * GLOBAL VARIABLES/DATA-TYPES DEFINITIONS
@@ -554,7 +564,7 @@ typedef struct TDAhostIntrThread {
   /**
    * @brief  Sync Object for this thread
    */
-  EVENT	eventHandle;
+  sem_t	eventHandle;
 
 } TDAThreadParam_t;
 

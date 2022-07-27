@@ -47,8 +47,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <pthread.h>
-
-#include "../ethernet/src/event.h"
+#include <semaphore.h>
 
 
 /******************************************************************************
@@ -107,7 +106,7 @@ typedef unsigned int osiTime_t;
 
     \note On each porting or platform the type could be whatever is needed - integer, structure etc.
 */
-typedef EVENT* osiSyncObj_t;
+typedef sem_t* osiSyncObj_t;
 
 /*!
     \brief type definition for a locking object container

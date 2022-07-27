@@ -72,7 +72,8 @@ int event_wait_timeout(EVENT* event, uint32_t timeout) {
   uint32_t status;
   struct timespec t;
   clock_gettime(CLOCK_REALTIME, &t);
-  t.tv_sec += timeout/1000;
+  t.tv_sec += (timeout / 1000);
+  t.tv_nsec += (timeout % 1000) * 1000000;
 
   while (!event->flag) {
     status = pthread_cond_timedwait(&event->cond, &event->mtx, &t);

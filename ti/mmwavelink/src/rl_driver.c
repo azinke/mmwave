@@ -2822,7 +2822,6 @@ rlReturnVal_t rlDriverCmdInvoke(rlUInt8_t deviceMap, rlDriverMsg_t inMsg,
                             /* CRC Not Included */
                             rl_txMsg[devIndex].hdr.flags.b2Crc = RL_HDR_FLAG_NO_CRC;
                         }
-
                         /* Append Dummy Bytes if CRC is present */
                         if (rl_txMsg[devIndex].hdr.flags.b2Crc == RL_HDR_FLAG_CRC)
                         {

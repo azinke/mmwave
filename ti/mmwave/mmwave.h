@@ -73,12 +73,7 @@
 #define MAX_GET_CHIRP_CONFIG_IDX              14
 
 /* To enable TX2 */
-#define ENABLE_TX2                             1
-
-/* LUT Buffer size for Advanced chirp 
-   Max size = 12KB (12*1024) */
-#define LUT_ADVCHIRP_TABLE_SIZE                5*1024
-
+#define ENABLE_TX2                             0
 
 
 /******************************************************************************
@@ -227,11 +222,11 @@ int MMWL_powerOff(unsigned char deviceMap);
 
 /*sensor stop*/
 int MMWL_sensorStop(unsigned char deviceMap);
-int MMWL_StopFrame(unsigned int deviceMap);
+int MMWL_StopFrame(unsigned char deviceMap);
 
 /*Sensor start*/
 int MMWL_sensorStart(unsigned char deviceMap);
-int MMWL_StartFrame(unsigned int deviceMap);
+int MMWL_StartFrame(unsigned char deviceMap);
 
 /*Frame configuration*/
 int MMWL_frameConfig(
@@ -264,6 +259,9 @@ int MMWL_dataPathConfig(unsigned char deviceMap, rlDevDataPathCfg_t dataPathCfgA
 /*RFinit*/
 int MMWL_rfInit(unsigned char deviceMap);
 
+/* RF Device configuration */
+int MMWL_RFDeviceConfig(unsigned char deviceMap);
+
 /*Lowpower configuration*/
 int MMWL_lowPowerConfig(unsigned char deviceMap, rlLowPowerModeCfg_t rfLpModeCfgArgs);
 /* APLL Synth BW configuration */
@@ -290,20 +288,11 @@ int MMWL_fileWrite(unsigned char deviceMap, unsigned short remChunks,
                    unsigned short chunkLen,
                    unsigned char *chunk);
 
-/* Save Calibration Data to a file */
-// int MMWL_saveCalibDataToFile(unsigned char deviceMap);
-/* Save Phase shifter Calibration Data to a file */
-// int MMWL_savePhShiftCalibDataToFile(unsigned char deviceMap);
-/* Load Calibration Data to a file */
-// int MMWL_LoadCalibDataFromFile(unsigned char deviceMap);
-/* Load Phase shifter Calibration Data from a file */
-// int MMWL_LoadPhShiftCalibDataFromFile(unsigned char deviceMap);
-
 /** Power up device */
-int MMWL_DevicePowerUp(unsigned int deviceMap);
+int MMWL_DevicePowerUp(unsigned char deviceMap, uint32_t rlClientCbsTimeout, uint32_t sopTimeout);
 
 /*Poweron Master*/
-int MMWL_powerOnMaster(unsigned char deviceMap);
+int MMWL_powerOnMaster(unsigned char deviceMap, uint32_t rlClientCbsTimeout);
 
 /** Connect to ethernet and init TDA */
 int MMWL_TDAInit(unsigned char *ipAddr, unsigned int port, uint8_t deviceMap);
@@ -315,7 +304,10 @@ int MMWL_ArmingTDA(rlTdaArmCfg_t tdaArmCfgArgs);
 int MMWL_DeArmingTDA();
 
 /** Assign device map */
-int MMWL_AssignDeviceMap(uint8_t deviceMap, uint8_t* masterMap, uint8_t* slavesMap);
+int MMWL_AssignDeviceMap(unsigned char deviceMap, uint8_t* masterMap, uint8_t* slavesMap);
+
+/** Set device CRC type */
+int MMWL_setDeviceCrcType(unsigned char deviceMap);
 
 uint64_t computeCRC(uint8_t *p, uint32_t len, uint8_t width);
 
