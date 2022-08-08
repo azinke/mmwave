@@ -1,6 +1,6 @@
 # Compiler
 CC = gcc
-FLAGS = -o
+CFLAGS = -o
 
 ODIR = output
 
@@ -24,14 +24,17 @@ mmwethernet:
 mmwave: mmwlink mmwethernet
 	${CC} -c ${ROOT_DIR}/mmwave/*.c
 
+cliopt:
+	${CC} -c opt/*.c
+
 # Build all
-all: mmwlink mmwethernet mmwave
+all: mmwlink mmwethernet mmwave cliopt
 	${CC} -c *.c
-	${CC} -o mimo *.o -lpthread
+	${CC} ${CFLAGS} mmwave *.o -lpthread
 	@rm -f *.o
 
 build: all
 
 clean:
 	@rm -f *.o
-	@rm -f mimo
+	@rm -f mmwave
