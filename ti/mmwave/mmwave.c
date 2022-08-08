@@ -1,20 +1,5 @@
 #include "mmwave.h"
 
-
-/****************************************************************************************
-* USER CONFIGURABLE DEFINITIONS
-****************************************************************************************
-*/
-
-// TDA2xx IP Address
-static char mmwl_TDA_IPAddress[] = "192.168.33.180";
-
-// TDA2 Configuration Port
-static unsigned short mmwl_TDA_ConfigPort = 5001U;
-
-// Capture Directory
-static char mmwl_TDA_CaptureDirectory[] = "/mnt/ssd/MMWL_Capture";
-
 /******************************************************************************
 * GLOBAL VARIABLES/DATA-TYPES DEFINITIONS
 ******************************************************************************
@@ -33,16 +18,8 @@ static unsigned char mmwl_bGpadcDataRcv = 0U;
 static unsigned char mmwl_bMssCpuFault = 0U;
 static unsigned char mmwl_bMssEsmFault = 0U;
 
-static unsigned char mmwl_TDA_DeviceMapCascadedMaster = 0U;
-static unsigned char mmwl_TDA_DeviceMapCascadedSlaves = 0U;
-static unsigned char mmwl_TDA_DeviceMapCascadedAll = 0U;
-static unsigned char mmwl_TDA_SlavesEnabled[3] = { 0 };
 static unsigned int mmwl_TDA_width[4] = { 0 };
 static unsigned int mmwl_TDA_height[4] = { 0 };
-static unsigned int mmwl_TDA_framePeriodicity = 0;
-static unsigned int mmwl_TDA_numAllocatedFiles = 0;
-static unsigned int mmwl_TDA_enableDataPacking = 0;
-static unsigned int mmwl_TDA_numFramesToCapture = 0;
 
 static unsigned char mmwl_bTDA_CaptureCardConnect = 0U;
 static unsigned char mmwl_bTDA_CreateAppACK = 0U;
@@ -72,17 +49,6 @@ unsigned int gContStreamTime = 0;
 /* store continous streaming sampling rate */
 unsigned int gContStreamSampleRate = 0;
 
-/* SPI Communication handle to AWR2243 device*/
-rlComIfHdl_t mmwl_devHdl = NULL;
-
-/* structure parameters of two profile confing and cont mode config are same */
-// rlProfileCfg_t profileCfgArgs[2] = { 0 };
-
-/* structure parameters of four profile confing of Adv chirp */
-rlProfileCfg_t ProfileCfgArgs;
-
-/* Chirp configuration */
-rlChirpCfg_t chirpConfig;
 
 /* Strcture to store async event config */
 rlRfDevCfg_t rfDevCfg = { 0x0 };
@@ -90,23 +56,13 @@ rlRfDevCfg_t rfDevCfg = { 0x0 };
 /* Structure to store GPADC measurement data sent by device */
 rlRecvdGpAdcData_t rcvGpAdcData = {0};
 
-/* calibData is the calibration data sent by the device which needs to store to
-   sFlash and will be used for factory calibration or embedded in the application itself */
-rlCalibrationData_t calibData = { 0 };
-rlPhShiftCalibrationData_t phShiftCalibData = { 0 };
-
-/* File Handle for Calibration Data */
-FILE *CalibrationDataPtr = NULL;
-FILE *PhShiftCalibrationDataPtr = NULL;
-
-
 /* Thread return values */
 rlReturnVal_t threadRetVal[TDA_NUM_CONNECTED_DEVICES_MAX];
 
 
 rlReturnVal_t rlDeviceFileDownloadWrap(rlUInt8_t deviceMap, \
       rlUInt16_t remChunks, rlFileData_t* data) {
-  return(rlDeviceFileDownload(deviceMap, data, remChunks));
+  return (rlDeviceFileDownload(deviceMap, data, remChunks));
 }
 
 
@@ -358,16 +314,18 @@ void* threadHandler(void* lpParam) {
       threadRetVal[data->deviceIndex] = -1;
   }
 
-  return &threadRetVal[data->deviceIndex];
+  return NULL; // &threadRetVal[data->deviceIndex];
 }
 
 
 int callThreadApi(unsigned int apiInfo, unsigned int deviceMap, void *apiParams, unsigned int flags) {
   int  retVal = RL_RET_CODE_OK;
-  // uint32_t   dwThreadIdArray[TDA_NUM_CONNECTED_DEVICES_MAX] = { 0 };
-  HANDLE  hThreadArray[TDA_NUM_CONNECTED_DEVICES_MAX] = { 0 };
+  HANDLE  hThreadArray[TDA_NUM_CONNECTED_DEVICES_MAX];
+  bzero(hThreadArray, TDA_NUM_CONNECTED_DEVICES_MAX * sizeof(HANDLE));
+
   taskData myTaskData[TDA_NUM_CONNECTED_DEVICES_MAX];
   volatile int devIndex = 0;
+  unsigned int dmap = deviceMap;
 
   while (deviceMap != 0U) {
     if ((deviceMap & (1U << devIndex)) != 0U) {
@@ -384,10 +342,10 @@ int callThreadApi(unsigned int apiInfo, unsigned int deviceMap, void *apiParams,
   }
 
   for (devIndex = 0; devIndex < 4; devIndex++) {
-    if (hThreadArray[devIndex] != 0) {
-      void **ret = NULL;
-      pthread_join(hThreadArray[devIndex], ret);
-      threadRetVal[devIndex] = **((rlReturnVal_t**)ret);
+    if (hThreadArray[devIndex] != 0U) {
+      // rlReturnVal_t* pRet = &threadRetVal[devIndex];
+      // rlReturnVal_t** pRetVal = NULL;
+      pthread_join(hThreadArray[devIndex], NULL);
       retVal |= threadRetVal[devIndex];
     }
   }
@@ -410,7 +368,7 @@ void TDA_asyncEventHandler(rlUInt16_t deviceMap, rlUInt16_t cmdCode, rlUInt16_t 
   rlInt32_t status, rlUInt8_t *data) {
   switch (cmdCode) {
     case CAPTURE_RESPONSE_ACK:  {
-      printf(
+      DEBUG_PRINT(
         "Device map %u : CAPTURE_RESPONSE_ACK Async event recieved with status %d \n\n",
         deviceMap, status
       );
@@ -440,7 +398,7 @@ void TDA_asyncEventHandler(rlUInt16_t deviceMap, rlUInt16_t cmdCode, rlUInt16_t 
     }
 
     case CAPTURE_RESPONSE_NACK: {
-      printf(
+      DEBUG_PRINT(
         "Device map %u : CAPTURE_RESPONSE_NACK Async event recieved with status %d \n\n",
         deviceMap, status
       );
@@ -450,7 +408,7 @@ void TDA_asyncEventHandler(rlUInt16_t deviceMap, rlUInt16_t cmdCode, rlUInt16_t 
     case CAPTURE_RESPONSE_VERSION_INFO: {
       unsigned char rcvData[100] = { 0 };
       if (data != NULL) memcpy(&rcvData, data, sizeof(rcvData));
-      printf(
+      DEBUG_PRINT(
         "Device map %u : CAPTURE_RESPONSE_VERSION_INFO Async event recieved with status %d. TDA Version : %s \n\n",
         deviceMap, status, rcvData
       );
@@ -462,7 +420,7 @@ void TDA_asyncEventHandler(rlUInt16_t deviceMap, rlUInt16_t cmdCode, rlUInt16_t 
       if (data != NULL) memcpy(&rcvData_1, data, sizeof(rcvData_1));
       unsigned int width = rcvData_1[0] | (rcvData_1[1] << 1) | (rcvData_1[2] << 2) | (rcvData_1[3] << 3);
       unsigned int height = rcvData_1[4] | (rcvData_1[5] << 1) | (rcvData_1[6] << 2) | (rcvData_1[7] << 3);
-      printf(
+      DEBUG_PRINT(
         "Device map %u : CAPTURE_RESPONSE_CONFIG_INFO Async event recieved with status %d. Width : %d and Height : %d \n\n",
         deviceMap, status, width, height
       );
@@ -470,7 +428,7 @@ void TDA_asyncEventHandler(rlUInt16_t deviceMap, rlUInt16_t cmdCode, rlUInt16_t 
     }
 
     case CAPTURE_RESPONSE_TRACE_DATA: {
-      printf(
+      DEBUG_PRINT(
         "Device map %u : CAPTURE_RESPONSE_TRACE_DATA Async event recieved with status %d \n\n",
         deviceMap, status
       );
@@ -481,7 +439,7 @@ void TDA_asyncEventHandler(rlUInt16_t deviceMap, rlUInt16_t cmdCode, rlUInt16_t 
       unsigned char rcvData_2[12] = { 0 };
       if (data != NULL) memcpy(&rcvData_2, data, sizeof(rcvData_2));
       unsigned int gpioVal = rcvData_2[8] | (rcvData_2[9] << 1) | (rcvData_2[10] << 2) | (rcvData_2[11] << 3);
-      printf(
+      DEBUG_PRINT(
         "Device map %u : CAPTURE_RESPONSE_GPIO_DATA Async event recieved with status %d. GPIO Value : %d \n\n",
         deviceMap, status, gpioVal
       );
@@ -493,7 +451,7 @@ void TDA_asyncEventHandler(rlUInt16_t deviceMap, rlUInt16_t cmdCode, rlUInt16_t 
       if (data != NULL)
         memcpy(&rcvData_3, data, sizeof(rcvData_3));
       unsigned int sopMode = rcvData_3[0] | (rcvData_3[1] << 1) | (rcvData_3[2] << 2) | (rcvData_3[3] << 3);
-      printf(
+      DEBUG_PRINT(
         "Device map %u : SENSOR_RESPONSE_SOP_INFO Async event recieved with status %d. SOP Mode : %d \n\n",
         deviceMap, status, sopMode
       );
@@ -501,14 +459,14 @@ void TDA_asyncEventHandler(rlUInt16_t deviceMap, rlUInt16_t cmdCode, rlUInt16_t 
     }
 
     case CAPTURE_RESPONSE_NETWORK_ERROR: {
-      printf(
+      DEBUG_PRINT(
         "CAPTURE_RESPONSE_NETWORK_ERROR Async event recieved! Connection error! Please reboot the TDA board\n\n"
       );
       break;
     }
 
     default: {
-      printf(
+      DEBUG_PRINT(
         "Device map %u : Unhandled Async Event with cmdCode = 0x%x and status = %d  \n\n",
         deviceMap, cmdCode, status
       );
@@ -548,7 +506,7 @@ void MMWL_asyncEventHandler(rlUInt8_t deviceIndex, rlUInt16_t sbId,
           pthread_mutex_lock(&rlAsyncEvent);
           unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
           mmwl_bSensorStarted |= (1 << deviceIndex);
-          printf("Device map %u : Frame Start Async event\n\n", deviceMap);
+          DEBUG_PRINT("Device map %u : Frame Start Async event\n\n", deviceMap);
           pthread_mutex_unlock(&rlAsyncEvent);
           break;
         }
@@ -557,20 +515,20 @@ void MMWL_asyncEventHandler(rlUInt8_t deviceIndex, rlUInt16_t sbId,
           pthread_mutex_lock(&rlAsyncEvent);
           unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
           mmwl_bSensorStarted &= ~(1 << deviceIndex);
-          printf("Device map %u : Frame End Async event\n\n", deviceMap);
+          DEBUG_PRINT("Device map %u : Frame End Async event\n\n", deviceMap);
           pthread_mutex_unlock(&rlAsyncEvent);
           break;
         }
 
         case RL_RF_AE_CPUFAULT_SB: {
           unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
-          printf("Device map %u : BSS CPU Fault Async event\n\n", deviceMap);
+          DEBUG_PRINT("Device map %u : BSS CPU Fault Async event\n\n", deviceMap);
           while(1);
         }
 
         case RL_RF_AE_ESMFAULT_SB: {
           unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
-          printf("Device map %u : BSS ESM Fault Async event\n\n", deviceMap);
+          DEBUG_PRINT("Device map %u : BSS ESM Fault Async event\n\n", deviceMap);
           break;
         }
 
@@ -578,7 +536,7 @@ void MMWL_asyncEventHandler(rlUInt8_t deviceIndex, rlUInt16_t sbId,
           pthread_mutex_lock(&rlAsyncEvent);
           unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
           mmwl_bRfInitComp |= (1 << deviceIndex);
-          printf("Device map %u : RF-Init Async event\n\n", deviceMap);
+          DEBUG_PRINT("Device map %u : RF-Init Async event\n\n", deviceMap);
           pthread_mutex_unlock(&rlAsyncEvent);
           break;
         }
@@ -587,7 +545,7 @@ void MMWL_asyncEventHandler(rlUInt8_t deviceIndex, rlUInt16_t sbId,
           pthread_mutex_lock(&rlAsyncEvent);
           unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
           rlCalMonTimingErrorReportData_t *data = (rlCalMonTimingErrorReportData_t*)payload;
-          printf(
+          DEBUG_PRINT(
             "Device map %u : Cal Mon Time Unit Fail [0x%x] Async event\n\n",
             deviceMap, data->timingFailCode
           );
@@ -597,7 +555,7 @@ void MMWL_asyncEventHandler(rlUInt8_t deviceIndex, rlUInt16_t sbId,
 
         case RL_RF_AE_RUN_TIME_CALIB_REPORT_SB: {
           unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
-          printf(
+          DEBUG_PRINT(
             "Device map %u : Run time Calibration Report [0x%x] Async event\n\n",
             deviceMap, ((rlRfRunTimeCalibReport_t*)payload)->calibErrorFlag
           );
@@ -607,7 +565,7 @@ void MMWL_asyncEventHandler(rlUInt8_t deviceIndex, rlUInt16_t sbId,
         case RL_RF_AE_DIG_LATENTFAULT_REPORT_SB: {
           unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
           rlDigLatentFaultReportData_t *data = (rlDigLatentFaultReportData_t*)payload;
-          printf(
+          DEBUG_PRINT(
             "Device map %u : Dig Latent Fault report [0x%x] Async event\n\n",
             deviceMap, data->digMonLatentFault
           );
@@ -617,7 +575,7 @@ void MMWL_asyncEventHandler(rlUInt8_t deviceIndex, rlUInt16_t sbId,
         case RL_RF_AE_MON_DIG_PERIODIC_REPORT_SB: {
           unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
           rlDigPeriodicReportData_t *data = (rlDigPeriodicReportData_t*)payload;
-          printf(
+          DEBUG_PRINT(
             "Device map %u : Dig periodic report [0x%x] Async event\n\n",
             deviceMap, data->digMonPeriodicStatus
           );
@@ -635,7 +593,7 @@ void MMWL_asyncEventHandler(rlUInt8_t deviceIndex, rlUInt16_t sbId,
         }
 
         default: {
-          printf("Unhandled Async Event msgId: 0x%x, asyncSB:0x%x  \n\n", msgId, asyncSB);
+          DEBUG_PRINT("Unhandled Async Event msgId: 0x%x, asyncSB:0x%x  \n\n", msgId, asyncSB);
           break;
         }
       }
@@ -649,9 +607,9 @@ void MMWL_asyncEventHandler(rlUInt8_t deviceIndex, rlUInt16_t sbId,
           pthread_mutex_lock(&rlAsyncEvent);
           unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
           mmwl_bInitComp |= (1 << deviceIndex);
-          printf("Device map %u : MSS Power Up Async event\n\n", deviceMap);
+          DEBUG_PRINT("Device map %u : MSS Power Up Async event\n\n", deviceMap);
           rlInitComplete_t *data = (rlInitComplete_t*)payload;
-          printf(
+          DEBUG_PRINT(
             "PowerUp Time = %d, PowerUp Status 1 = 0x%x, PowerUp Status 2 = 0x%x, BootTestStatus 1 = 0x%x, BootTestStatus 2 = 0x%x\n\n",
             data->powerUpTime, data->powerUpStatus1,
             data->powerUpStatus2, data->bootTestStatus1,
@@ -665,7 +623,7 @@ void MMWL_asyncEventHandler(rlUInt8_t deviceIndex, rlUInt16_t sbId,
           pthread_mutex_lock(&rlAsyncEvent);
           unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
           mmwl_bStartComp |= (1 << deviceIndex);
-          printf("Device map %u : BSS Power Up Async event\n\n", deviceMap);
+          DEBUG_PRINT("Device map %u : BSS Power Up Async event\n\n", deviceMap);
           pthread_mutex_unlock(&rlAsyncEvent);
           break;
         }
@@ -674,7 +632,7 @@ void MMWL_asyncEventHandler(rlUInt8_t deviceIndex, rlUInt16_t sbId,
           pthread_mutex_lock(&rlAsyncEvent);
           unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
           mmwl_bMssCpuFault |= (1 << deviceIndex);
-          printf("Device map %u : MSS CPU Fault Async event\n\n", deviceMap);
+          DEBUG_PRINT("Device map %u : MSS CPU Fault Async event\n\n", deviceMap);
           pthread_mutex_unlock(&rlAsyncEvent);
           break;
         }
@@ -683,9 +641,9 @@ void MMWL_asyncEventHandler(rlUInt8_t deviceIndex, rlUInt16_t sbId,
           pthread_mutex_lock(&rlAsyncEvent);
           unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
           mmwl_bMssEsmFault |= (1 << deviceIndex);
-          printf("Device map %u : MSS ESM Fault Async event\n\n", deviceMap);
+          DEBUG_PRINT("Device map %u : MSS ESM Fault Async event\n\n", deviceMap);
           rlMssEsmFault_t *data = (rlMssEsmFault_t*)payload;
-          printf("ESM Grp1 Error = 0x%x, ESM Grp2 Error = 0x%x\n\n", data->esmGrp1Err, data->esmGrp2Err);
+          DEBUG_PRINT("ESM Grp1 Error = 0x%x, ESM Grp2 Error = 0x%x\n\n", data->esmGrp1Err, data->esmGrp2Err);
           pthread_mutex_unlock(&rlAsyncEvent);
           break;
         }
@@ -694,7 +652,7 @@ void MMWL_asyncEventHandler(rlUInt8_t deviceIndex, rlUInt16_t sbId,
           pthread_mutex_lock(&rlAsyncEvent);
           unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
           mmwl_bMssBootErrStatus |= (1 << deviceIndex);
-          printf("Device map %u : MSS Boot Error Status Async event\n\n", deviceMap);
+          DEBUG_PRINT("Device map %u : MSS Boot Error Status Async event\n\n", deviceMap);
           pthread_mutex_unlock(&rlAsyncEvent);
           break;
         }
@@ -702,7 +660,7 @@ void MMWL_asyncEventHandler(rlUInt8_t deviceIndex, rlUInt16_t sbId,
         case RL_DEV_AE_MSS_LATENTFLT_TEST_REPORT_SB: {
           unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
           rlMssLatentFaultReport_t *data = (rlMssLatentFaultReport_t*)payload;
-          printf(
+          DEBUG_PRINT(
             "Device map %u : MSS Latent fault [0x%x] [0x%x] Async event\n\n",
             deviceMap, data->testStatusFlg1, data->testStatusFlg2
           );
@@ -712,7 +670,7 @@ void MMWL_asyncEventHandler(rlUInt8_t deviceIndex, rlUInt16_t sbId,
         case RL_DEV_AE_MSS_PERIODIC_TEST_STATUS_SB: {
           unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
           rlMssPeriodicTestStatus_t *data = (rlMssPeriodicTestStatus_t*)payload;
-          printf(
+          DEBUG_PRINT(
             "Device map %u : MSS periodic test [0x%x] Async event\n\n",
             deviceMap, data->testStatusFlg
           );
@@ -722,12 +680,12 @@ void MMWL_asyncEventHandler(rlUInt8_t deviceIndex, rlUInt16_t sbId,
         case RL_DEV_AE_MSS_RF_ERROR_STATUS_SB: {
           unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
           rlMssRfErrStatus_t *data = (rlMssRfErrStatus_t*)payload;
-          printf("Device map %u : MSS RF Error [0x%x] Status Async event\n\n", deviceMap, data->errStatusFlg);
+          DEBUG_PRINT("Device map %u : MSS RF Error [0x%x] Status Async event\n\n", deviceMap, data->errStatusFlg);
           break;
         }
 
         default: {
-          printf("Unhandled Async Event msgId: 0x%x, asyncSB:0x%x  \n\n", msgId, asyncSB);
+          DEBUG_PRINT("Unhandled Async Event msgId: 0x%x, asyncSB:0x%x  \n\n", msgId, asyncSB);
           break;
         }
       }
@@ -743,26 +701,26 @@ void MMWL_asyncEventHandler(rlUInt8_t deviceIndex, rlUInt16_t sbId,
           /* CRC mismatched in the received Async-Event msg */
           if (errTemp == RL_RET_CODE_CRC_FAILED) {
               unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
-              printf("Device map %u : CRC mismatched in the received Async-Event msg\n\n", deviceMap);
+              DEBUG_PRINT("Device map %u : CRC mismatched in the received Async-Event msg\n\n", deviceMap);
           }
 
           /* Checksum mismatched in the received msg */
           else if (errTemp == RL_RET_CODE_CHKSUM_FAILED) {
               unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
-              printf("Device map %u : Checksum mismatched in the received msg\n\n", deviceMap);
+              DEBUG_PRINT("Device map %u : Checksum mismatched in the received msg\n\n", deviceMap);
           }
 
           /* Polling to HostIRQ is timed out,
           i.e. Device didn't respond to CNYS from the Host */
           else if (errTemp == RL_RET_CODE_HOSTIRQ_TIMEOUT) {
               unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
-              printf("Device map %u : HostIRQ polling timed out\n\n", deviceMap);
+              DEBUG_PRINT("Device map %u : HostIRQ polling timed out\n\n", deviceMap);
           }
 
           /* If any of OSI call-back function returns non-zero value */
           else if (errTemp == RL_RET_CODE_RADAR_OSIF_ERROR) {
               unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
-              printf("Device map %u : mmWaveLink OS_IF error \n\n", deviceMap);
+              DEBUG_PRINT("Device map %u : mmWaveLink OS_IF error \n\n", deviceMap);
           }
           break;
         }
@@ -772,7 +730,7 @@ void MMWL_asyncEventHandler(rlUInt8_t deviceIndex, rlUInt16_t sbId,
 
     default: {
       unsigned int deviceMap = createDevMapFromDevId(deviceIndex);
-      printf(
+      DEBUG_PRINT(
         "Device map %u : Unhandled Async Event msgId: 0x%x, asyncSB:0x%x  \n\n",
         deviceMap, msgId, asyncSB
       );
@@ -808,12 +766,13 @@ int MMWL_computeCRC(unsigned char* data, unsigned int dataLen, unsigned char crc
 *   @brief Power on Master API.
 *
 *   @param[in] deviceMap - Devic Index
+*   @param[in] rlClientCbsTimeout - Timeout to use for mmwavelink client in ms
 *
 *   @return int Success - 0, Failure - Error Code
 *
 *   Power on Master API.
 */
-int MMWL_powerOnMaster(unsigned char deviceMap) {
+int MMWL_powerOnMaster(unsigned char deviceMap, uint32_t rlClientCbsTimeout) {
   int retVal = RL_RET_CODE_OK, timeOutCnt = 0;
   /*
     \subsection     porting_step1   Step 1 - Define mmWaveLink client callback structure
@@ -826,7 +785,7 @@ int MMWL_powerOnMaster(unsigned char deviceMap) {
     */
   rlClientCbs_t clientCtx = { 0 };
 
-  clientCtx.ackTimeout = 1000;  // ms
+  clientCtx.ackTimeout = rlClientCbsTimeout;  // ms
   clientCtx.crcType =  gAwr2243CrcType;
 
   /*
@@ -988,7 +947,7 @@ int MMWL_fileDownload(unsigned char deviceMap, unsigned int fileLen) {
   pmmwl_imgBuffer = (unsigned char*)&metaImage[0];
 
   if(pmmwl_imgBuffer == NULL) {
-    printf(
+    DEBUG_PRINT(
       "Device map %u : MMWL_fileDwld Fail. File Buffer is NULL \n\n\r",
       deviceMap
     );
@@ -1015,29 +974,29 @@ int MMWL_fileDownload(unsigned char deviceMap, unsigned int fileLen) {
   ret_val = MMWL_fileWrite(deviceMap, (mmwl_iRemChunks-1), usFirstChunkLen,
                             firstChunk);
   if (ret_val < 0) {
-      printf(
+    DEBUG_PRINT("Failed first chunk\n!");
+      DEBUG_PRINT(
         "Device map %u : MMWL_fileDwld Fail. Ftype: %d\n\n\r",
         deviceMap, MMWL_FILETYPE_META_IMG
       );
       return ret_val;
-  }
+  } else DEBUG_PRINT("Firt chunk sent!\n");
   pmmwl_imgBuffer += MMWL_FW_FIRST_CHUNK_SIZE;
   mmwl_iRemChunks--;
 
   if(mmwl_iRemChunks > 0) {
-      printf("Device map %u : Download in Progress: ", deviceMap);
+      DEBUG_PRINT("Device map %u : Download in Progress: ", deviceMap);
   }
   /*Remaining Chunk*/
   while (mmwl_iRemChunks > 0) {
     usProgress = (((iNumChunks - mmwl_iRemChunks) * 100) / iNumChunks);
-    printf("%d%%..", usProgress);
+    DEBUG_PRINT("%d%%..", usProgress);
 
     /* Last chunk */
     if ((mmwl_iRemChunks == 1) && (usLastChunkLen > 0)) {
-      ret_val = MMWL_fileWrite(deviceMap, 0, usLastChunkLen,
-        pmmwl_imgBuffer);
+      ret_val = MMWL_fileWrite(deviceMap, 0, usLastChunkLen, pmmwl_imgBuffer);
       if (ret_val < 0) {
-        printf(
+        DEBUG_PRINT(
           "Device map %u : MMWL_fileDwld last chunk Fail : Ftype: %d\n\n\r",
           deviceMap, MMWL_FILETYPE_META_IMG
         );
@@ -1049,7 +1008,7 @@ int MMWL_fileDownload(unsigned char deviceMap, unsigned int fileLen) {
         MMWL_FW_CHUNK_SIZE, pmmwl_imgBuffer);
 
       if (ret_val < 0) {
-        printf(
+        DEBUG_PRINT(
           "\n\n\r Device map %u : MMWL_fileDwld rem chunk Fail : Ftype: %d\n\n\r",
           deviceMap, MMWL_FILETYPE_META_IMG
         );
@@ -1060,7 +1019,7 @@ int MMWL_fileDownload(unsigned char deviceMap, unsigned int fileLen) {
 
     mmwl_iRemChunks--;
   }
-  printf("Done!\n\n");
+  DEBUG_PRINT("Done!\n\n");
   return ret_val;
 }
 
@@ -1079,9 +1038,10 @@ int MMWL_firmwareDownload(unsigned char deviceMap) {
   int retVal = RL_RET_CODE_OK, timeOutCnt = 0;
 
   /* Meta Image download */
-  printf("Device map %u : Meta Image download started\n\n", deviceMap);
+  DEBUG_PRINT("Device map %u : Meta Image (size %d bytes) download started\n\n",
+    deviceMap, MMWL_META_IMG_FILE_SIZE);
   retVal = MMWL_fileDownload(deviceMap, MMWL_META_IMG_FILE_SIZE);
-  printf(
+  DEBUG_PRINT(
     "Device map %u : Meta Image download complete ret = %d\n\n",
     deviceMap, retVal
   );
@@ -1107,7 +1067,7 @@ int MMWL_rfEnable(unsigned char deviceMap) {
     msleep(1); /*Sleep 1 msec*/
     timeOutCnt++;
     if (timeOutCnt > MMWL_API_START_TIMEOUT) {
-      printf(
+      DEBUG_PRINT(
         "Device map %u : Timeout! RF Enable Status = %u\n\n",
         (unsigned int)deviceMap, mmwl_bStartComp
       );
@@ -1126,14 +1086,14 @@ int MMWL_rfEnable(unsigned char deviceMap) {
         rlRfDieIdCfg_t dieId = { 0 };
         retVal = CALL_API(RF_GET_VERSION_IND, devMap, &verArgs, 0);
 
-        printf(
+        DEBUG_PRINT(
           "Device map %u : RF Version [%2d.%2d.%2d.%2d] \nDevice map %u : MSS version [%2d.%3d.%2d.%3d] \nDevice map %u : mmWaveLink version [%2d.%2d.%2d.%2d]\n\n",
           devMap, verArgs.rf.fwMajor, verArgs.rf.fwMinor, verArgs.rf.fwBuild, verArgs.rf.fwDebug,
           devMap, verArgs.master.fwMajor, verArgs.master.fwMinor, verArgs.master.fwBuild, verArgs.master.fwDebug,
           devMap, verArgs.mmWaveLink.major, verArgs.mmWaveLink.minor, verArgs.mmWaveLink.build, verArgs.mmWaveLink.debug
         );
 
-        printf(
+        DEBUG_PRINT(
           "Device map %u : RF Patch Version [%2d.%2d.%2d.%2d] \nDevice map %u : MSS Patch version [%2d.%2d.%2d.%2d]\n\n",
           devMap, verArgs.rf.patchMajor, verArgs.rf.patchMinor,
           ((verArgs.rf.patchBuildDebug & 0xF0) >> 4), (verArgs.rf.patchBuildDebug & 0x0F),
@@ -1178,11 +1138,9 @@ int MMWL_dataFmtConfig(unsigned char deviceMap, rlDevDataFmtCfg_t dataFmtCfgArgs
 /* SourceId :  */
 /* DesignId :  */
 /* Requirements :  */
-int MMWL_ldoBypassConfig(unsigned char deviceMap) {
+int MMWL_ldoBypassConfig(unsigned char deviceMap, rlRfLdoBypassCfg_t rfLdoBypassCfgArgs) {
   int retVal = RL_RET_CODE_OK;
-  rlRfLdoBypassCfg_t rfLdoBypassCfgArgs = { 0 };
-
-  printf(
+  DEBUG_PRINT(
     "Device map %u : Calling rlRfSetLdoBypassConfig With Bypass [%d] \n\n",
     deviceMap, rfLdoBypassCfgArgs.ldoBypassEnable
   );
@@ -1205,7 +1163,7 @@ int MMWL_ldoBypassConfig(unsigned char deviceMap) {
 /* Requirements :  */
 int MMWL_adcOutConfig(unsigned char deviceMap, rlAdcOutCfg_t adcOutCfgArgs) {
   int retVal = RL_RET_CODE_OK;
-  printf(
+  DEBUG_PRINT(
     "Device map %u : Calling rlSetAdcOutConfig With [%d]ADC Bits and [%d]ADC Format \n\n",
     deviceMap, adcOutCfgArgs.fmt.b2AdcBits, adcOutCfgArgs.fmt.b2AdcOutFmt
   );
@@ -1238,7 +1196,7 @@ int MMWL_RFDeviceConfig(unsigned char deviceMap) {
   rfDevCfgArgs.reserved2         = 0x0;
   rfDevCfgArgs.reserved3         = 0x0;
 
-  printf(
+  DEBUG_PRINT(
     "Device map %u : Calling rlRfSetDeviceCfg With bssAnaControl = [%d] and bssDigCtrl = [%d]\n\n",
     deviceMap, rfDevCfgArgs.bssAnaControl, rfDevCfgArgs.bssDigCtrl
   );
@@ -1269,7 +1227,7 @@ int MMWL_channelConfig(unsigned char deviceMap, unsigned short cascade, rlChanCf
   if(cascade == 2) {
     rfChanCfgArgs.cascadingPinoutCfg &= ~(1U << 5U); /* Disable OSC CLK OUT for slaves */ 
   }
-  printf(
+  DEBUG_PRINT(
     "Device map %u : Calling rlSetChannelConfig With [%d]Rx and [%d]Tx Channel Enabled \n\n",
     deviceMap, rfChanCfgArgs.rxChannelEn, rfChanCfgArgs.txChannelEn
   );
@@ -1289,14 +1247,9 @@ int MMWL_channelConfig(unsigned char deviceMap, unsigned short cascade, rlChanCf
 *
 *   Sets misc feature such as per chirp phase shifter and Advance chirp
 */
-int MMWL_setMiscConfig(unsigned char deviceMap) {
+int MMWL_setMiscConfig(unsigned char deviceMap, rlRfMiscConf_t miscCfg) {
   int32_t retVal;
-  rlRfMiscConf_t MiscCfg = { 0 };
-  /* Enable Adv chirp feature 
-    b0 PERCHIRP_PHASESHIFTER_EN
-    b1 ADVANCE_CHIRP_CONFIG_EN  */
-  MiscCfg.miscCtl = 0x3;
-  retVal = CALL_API(RF_SET_MISC_CONFIG_IND, deviceMap, &MiscCfg, 0);
+  retVal = CALL_API(RF_SET_MISC_CONFIG_IND, deviceMap, &miscCfg, 0);
   return retVal;
 }
 
@@ -1332,59 +1285,60 @@ int MMWL_setDeviceCrcType(unsigned char deviceMap) {
 *   Channel, ADC,Data format configuration API.
 */
 int MMWL_basicConfiguration(unsigned char deviceMap,
-        rlAdcOutCfg_t adcOutCfgArgs, rlDevDataFmtCfg_t dataFmtCfgArgs) {
+        rlAdcOutCfg_t adcOutCfgArgs,
+        rlDevDataFmtCfg_t dataFmtCfgArgs, rlRfLdoBypassCfg_t ldoCfgArgs) {
   int retVal = RL_RET_CODE_OK;
 
   /* ADC out data format configuration */
   retVal = MMWL_adcOutConfig(deviceMap, adcOutCfgArgs);
   if (retVal != RL_RET_CODE_OK) {
-    printf(
+    DEBUG_PRINT(
       "Device map %u : AdcOut Config failed with error code %d\n\n",
       deviceMap, retVal
     );
     return -1;
   }
   else {
-    printf("Device map %u : AdcOut Configuration success\n\n", deviceMap);
+    DEBUG_PRINT("Device map %u : AdcOut Configuration success\n\n", deviceMap);
   }
 
   /* RF device configuration */
   retVal = MMWL_RFDeviceConfig(deviceMap);
   if (retVal != RL_RET_CODE_OK) {
-    printf(
+    DEBUG_PRINT(
       "Device map %u : RF Device Config failed with error code %d\n\n",
       deviceMap, retVal
     );
     return -1;
   }
   else {
-    printf("Device map %u : RF Device Configuration success\n\n", deviceMap);
+    DEBUG_PRINT("Device map %u : RF Device Configuration success\n\n", deviceMap);
   }
 
   /* LDO bypass configuration */
-  retVal = MMWL_ldoBypassConfig(deviceMap);
+  retVal = MMWL_ldoBypassConfig(deviceMap, ldoCfgArgs);
   if (retVal != RL_RET_CODE_OK) {
-    printf(
+    DEBUG_PRINT(
       "Device map %u : LDO Bypass Config failed with error code %d\n\n",
       deviceMap, retVal
     );
     return -1;
   }
   else {
-      printf("Device map %u : LDO Bypass Configuration success\n\n", deviceMap);
+      DEBUG_PRINT("Device map %u : LDO Bypass Configuration success\n\n", deviceMap);
   }
 
   /* Data format configuration */
   retVal = MMWL_dataFmtConfig(deviceMap, dataFmtCfgArgs);
   if (retVal != RL_RET_CODE_OK) {
-    printf(
+    DEBUG_PRINT(
       "Device map %u : Data format Configuration failed with error code %d\n\n",
       deviceMap, retVal
     );
     return -1;
   }
   else {
-    printf("Device map %u : Data format Configuration success\n\n", deviceMap);
+    DEBUG_PRINT("Device map %u : Data format Configuration success\n\n", deviceMap);
   }
 
   /* low power configuration */
@@ -1392,27 +1346,27 @@ int MMWL_basicConfiguration(unsigned char deviceMap,
   rlLowPowerModeCfg_t rfLpModeCfgArgs = {0};
   retVal = MMWL_lowPowerConfig(deviceMap, rfLpModeCfgArgs);
   if (retVal != RL_RET_CODE_OK) {
-    printf(
+    DEBUG_PRINT(
       "Device map %u : Low Power Configuration failed with error %d \n\n",
       deviceMap, retVal
     );
     return -1;
   }
   else {
-    printf("Device map %u : Low Power Configuration success\n\n", deviceMap);
+    DEBUG_PRINT("Device map %u : Low Power Configuration success\n\n", deviceMap);
   }
 
   /* APLL Synth BW configuration */
   retVal = MMWL_ApllSynthBwConfig(deviceMap);
   if (retVal != RL_RET_CODE_OK) {
-    printf(
+    DEBUG_PRINT(
       "Device map %u : APLL Synth BW Configuration failed with error %d \n\n",
       deviceMap, retVal
     );
     return -1;
   }
   else {
-      printf("Device map %u : APLL Synth BW Configuration success\n\n", deviceMap);
+      DEBUG_PRINT("Device map %u : APLL Synth BW Configuration success\n\n", deviceMap);
   }
 
   return retVal;
@@ -1433,30 +1387,30 @@ int MMWL_rfInit(unsigned char deviceMap) {
   int retVal = RL_RET_CODE_OK, timeOutCnt = 0;
   mmwl_bRfInitComp = mmwl_bRfInitComp & (~deviceMap);
 
-  if (rlDevGlobalCfgArgs.CalibEnable == TRUE) {
+  // if (rlDevGlobalCfgArgs.CalibEnable == TRUE) {
     rlRfInitCalConf_t rfCalibCfgArgs = { 0 };
 
     /* Calibration store */
-    if (rlDevGlobalCfgArgs.CalibStoreRestore == 1) {
+    // if (rlDevGlobalCfgArgs.CalibStoreRestore == 1) {
       /* Enable only required boot-time calibrations, by default all are enabled in the device */
-      rfCalibCfgArgs.calibEnMask = 0x1FF0;
-    }
+     rfCalibCfgArgs.calibEnMask = 0x1FF0;
+    // }
     /* Calibration restore */
-    else {
+    // else {
       /* Disable all the boot-time calibrations, by default all are enabled in the device */
-      rfCalibCfgArgs.calibEnMask = 0x0;
-    }
+     // rfCalibCfgArgs.calibEnMask = 0x0;
+    // }
     /* RF Init Calibration Configuration */
     retVal = CALL_API(RF_INIT_CALIB_CONFIG_IND, deviceMap, &rfCalibCfgArgs, 0);  
     if (retVal != RL_RET_CODE_OK) {
-      printf("Device map %u : RF Init Calibration Configuration failed with error %d \n\n",
+      DEBUG_PRINT("Device map %u : RF Init Calibration Configuration failed with error %d \n\n",
         deviceMap, retVal);
       return -1;
     }
     else {
-      printf("Device map %u : RF Init Calibration Configuration success \n\n", deviceMap);
+      DEBUG_PRINT("Device map %u : RF Init Calibration Configuration success \n\n", deviceMap);
     }
-  }
+  // }
 
   /* Run boot time calibrations */
   retVal = CALL_API(API_TYPE_B | RF_INIT_IND, deviceMap, NULL, 0);
@@ -1487,7 +1441,7 @@ int MMWL_rfInit(unsigned char deviceMap) {
 */
 int MMWL_profileConfig(unsigned char deviceMap, rlProfileCfg_t profileCfgArgs) {
   int retVal = RL_RET_CODE_OK, i;
-  printf(
+  DEBUG_PRINT(
     "Device map %u : Calling rlSetProfileConfig with \nProfileId[%d]\nStart Frequency[%f] GHz\nRamp Slope[%f] MHz/uS \n\n",
     deviceMap, profileCfgArgs.profileId,
     (float)((profileCfgArgs.startFreqConst * 53.6441803) / (1000 * 1000 * 1000)),
@@ -1514,11 +1468,12 @@ int MMWL_profileConfig(unsigned char deviceMap, rlProfileCfg_t profileCfgArgs) {
 int MMWL_chirpConfig(unsigned char deviceMap, rlChirpCfg_t chirpCfgArgs) {
   int retVal = RL_RET_CODE_OK;
   rlChirpCfg_t setChirpCfgArgs[2] = {0};
-  printf(
-    "Device map %u : Calling rlSetChirpConfig with \nProfileId[%d]\nStart Idx[%d]\nEnd Idx[%d] \n\n",
+  DEBUG_PRINT(
+    "Device map %u : Calling rlSetChirpConfig with \nProfileId[%d]\nStart Idx[%d]\nEnd Idx[%d] | Tx [%d]\n\n",
     deviceMap, chirpCfgArgs.profileId,
     chirpCfgArgs.chirpStartIdx,
-    chirpCfgArgs.chirpEndIdx
+    chirpCfgArgs.chirpEndIdx,
+    chirpCfgArgs.txEnable
   );
 
   /* With this API we can configure max 512 chirp in one call */
@@ -1548,28 +1503,25 @@ int MMWL_frameConfig(unsigned char deviceMap, rlFrameCfg_t frameCfgArgs, rlChanC
   int retVal = RL_RET_CODE_OK;
   unsigned char devId;
   if (deviceMap == 1) {
-    frameCfgArgs.triggerSelect = 1;
+    frameCfgArgs.triggerSelect = 1; // Software trigger
   }
   else {
-    frameCfgArgs.triggerSelect = 2;
+    frameCfgArgs.triggerSelect = 2; // Hardware trigger
   }
 
   framePeriodicity = (frameCfgArgs.framePeriodicity * 5)/(1000*1000);
   frameCount = frameCfgArgs.numFrames;
 
-  if (deviceMap == 1) {
-    mmwl_TDA_framePeriodicity = framePeriodicity;
-  }
-
   /* In Adv chirp context, frame start and frame end index is not used, the number 
-     of chirps is taken from number of loops */
+     of chirps is taken from number of loops
   if (rlDevGlobalCfgArgs.LinkAdvChirpTest == TRUE) {
     frameCfgArgs.numLoops = frameCfgArgs.numLoops * (frameCfgArgs.chirpEndIdx - frameCfgArgs.chirpStartIdx + 1);
     frameCfgArgs.chirpEndIdx = 0;
     frameCfgArgs.chirpStartIdx = 0;
   }
+  */
 
-  printf(
+  DEBUG_PRINT(
     "Device map %u : Calling rlSetFrameConfig with \nStart Idx[%d]\nEnd Idx[%d]\nLoops[%d]\nPeriodicity[%d]ms \n\n",
     deviceMap, frameCfgArgs.chirpStartIdx, frameCfgArgs.chirpEndIdx,
     frameCfgArgs.numLoops, (frameCfgArgs.framePeriodicity * 5)/(1000*1000)
@@ -1581,16 +1533,17 @@ int MMWL_frameConfig(unsigned char deviceMap, rlFrameCfg_t frameCfgArgs, rlChanC
     if ((deviceMap & (1 << devId)) != 0) {
       /* Height calculation */
       mmwl_TDA_height[devId] = frameCfgArgs.numLoops * (frameCfgArgs.chirpEndIdx - frameCfgArgs.chirpStartIdx + 1);
-      printf("Device map %u : Calculated TDA Height is %d\n\n", deviceMap, mmwl_TDA_height[devId]);
+      DEBUG_PRINT("Device map %u : Calculated TDA Height is %d\n\n", deviceMap, mmwl_TDA_height[devId]);
 
+      uint8_t rxChannelEn = rfChanCfgArgs.rxChannelEn;
       /* Width calculation */
       /* Count the number of Rx antenna */
       unsigned char numRxAntenna = 0;
-      while (rfChanCfgArgs.rxChannelEn != 0) {
-        if ((rfChanCfgArgs.rxChannelEn & 0x1) == 1) {
+      while (rxChannelEn != 0) {
+        if ((rxChannelEn & 0x1) == 1) {
           numRxAntenna++;
         }
-        rfChanCfgArgs.rxChannelEn = (rfChanCfgArgs.rxChannelEn >> 1);
+        rxChannelEn = (rxChannelEn >> 1);
       }
 
       /* ADC format (in bytes) */
@@ -1613,10 +1566,10 @@ int MMWL_frameConfig(unsigned char deviceMap, rlFrameCfg_t frameCfgArgs, rlChanC
       }
 
       /* Number of ADC samples */
-      unsigned short numAdcSamples = 0;
-      if (rlDevGlobalCfgArgs.LinkAdvChirpTest == FALSE) {
-        numAdcSamples = profileCfgArgs.numAdcSamples;
-      }
+      unsigned int numAdcSamples = 0;
+      // if (rlDevGlobalCfgArgs.LinkAdvChirpTest == FALSE) {
+      numAdcSamples = profileCfgArgs.numAdcSamples;
+      // }
 
       /* Datapath */
       /* Get CP and CQ value */
@@ -1633,8 +1586,9 @@ int MMWL_frameConfig(unsigned char deviceMap, rlFrameCfg_t frameCfgArgs, rlChanC
         cq_data = (cq_val * 16) / numAdcBits;
       }
 
+      DEBUG_PRINT("params: Num val per samples: %d, Num ADC samples: %u, num RX: %d\n", numValPerAdcSample, numAdcSamples, numRxAntenna);
       mmwl_TDA_width[devId] = (((numValPerAdcSample * numAdcSamples) + cp_data) * numRxAntenna) + cq_data;
-      printf("Device map %u : Calculated TDA Width is %d\n\n", deviceMap, mmwl_TDA_width[devId]);
+      DEBUG_PRINT("Device map %u : Calculated TDA Width is %d\n\n", deviceMap, mmwl_TDA_width[devId]);
     }
   }
   return retVal;
@@ -1644,7 +1598,7 @@ int MMWL_frameConfig(unsigned char deviceMap, rlFrameCfg_t frameCfgArgs, rlChanC
 /** @fn int MMWL_dataPathConfig(unsigned char deviceMap)
 *
 *   @brief Data path configuration API. Configures CQ data size on the
-*           lanes and number of samples of CQ[0-2] to br transferred.
+*           lanes and number of samples of CQ[0-2] to be transferred.
 *
 *   @param[in] deviceMap - Devic Index
 *   @param[in] dataPathCfgArgs - Data path configuration
@@ -1652,18 +1606,18 @@ int MMWL_frameConfig(unsigned char deviceMap, rlFrameCfg_t frameCfgArgs, rlChanC
 *   @return int Success - 0, Failure - Error Code
 *
 *   Data path configuration API. Configures CQ data size on the
-*   lanes and number of samples of CQ[0-2] to br transferred.
+*   lanes and number of samples of CQ[0-2] to be transferred.
 */
 int MMWL_dataPathConfig(unsigned char deviceMap, rlDevDataPathCfg_t dataPathCfgArgs) {
   int retVal = RL_RET_CODE_OK;
 
-  printf(
+  DEBUG_PRINT(
     "Device map %u : Calling rlDeviceSetDataPathConfig with HSI Interface[%d] Selected \n\n",
     deviceMap, dataPathCfgArgs.intfSel
   );
 
   /* same API is used to configure CQ data size on the
-    * lanes and number of samples of CQ[0-2] to br transferred.
+    * lanes and number of samples of CQ[0-2] to be transferred.
     */
   retVal = CALL_API(SET_DATA_PATH_CONFIG_IND, deviceMap, &dataPathCfgArgs, 0);
   return retVal;
@@ -1726,12 +1680,12 @@ int MMWL_CSI2LaneConfig(unsigned char deviceMap, rlDevCsi2Cfg_t CSI2LaneCfgArgs)
 
   retVal = CALL_API(SET_CSI2_CONFIG_IND, deviceMap, &CSI2LaneCfgArgs, 0);
   if (retVal != RL_RET_CODE_OK) {
-    printf("Device map %u : CSI2LaneConfig failed with error code %d\n\n",
+    DEBUG_PRINT("Device map %u : CSI2LaneConfig failed with error code %d\n\n",
       deviceMap, retVal);
     return -1;
   }
   else {
-    printf("Device map %u : CSI2LaneConfig success\n\n", deviceMap);
+    DEBUG_PRINT("Device map %u : CSI2LaneConfig success\n\n", deviceMap);
   }
   return retVal;
 }
@@ -1752,7 +1706,7 @@ int MMWL_CSI2LaneConfig(unsigned char deviceMap, rlDevCsi2Cfg_t CSI2LaneCfgArgs)
 int MMWL_setHsiClock(unsigned char deviceMap, rlDevHsiClk_t hsiClkgs) {
   int retVal = RL_RET_CODE_OK;
 
-  printf(
+  DEBUG_PRINT(
     "Device map %u : Calling rlDeviceSetHsiClk with HSI Clock[%d] \n\n",
     deviceMap, hsiClkgs.hsiClk
   );
@@ -1776,7 +1730,7 @@ int MMWL_setHsiClock(unsigned char deviceMap, rlDevHsiClk_t hsiClkgs) {
 int MMWL_hsiDataRateConfig(unsigned char deviceMap, rlDevDataPathClkCfg_t dataPathClkCfgArgs) {
   int retVal = RL_RET_CODE_OK;
 
-  printf(
+  DEBUG_PRINT(
     "Device map %u : Calling rlDeviceSetDataPathClkConfig with HSI Data Rate[%d] Selected \n\n",
     deviceMap, dataPathClkCfgArgs.dataRate
   );
@@ -1804,27 +1758,27 @@ int MMWL_hsiClockConfig(unsigned char deviceMap, rlDevDataPathClkCfg_t dataPathC
   /*LVDS clock configuration*/
   retVal = MMWL_hsiDataRateConfig(deviceMap, dataPathClkCfgArgs);
   if (retVal != RL_RET_CODE_OK) {
-    printf(
+    DEBUG_PRINT(
       "Device map %u : LvdsClkConfig failed with error code %d\n\n",
       deviceMap, retVal
     );
     return -1;
   }
   else {
-      printf("Device map %u : MMWL_hsiDataRateConfig success\n\n", deviceMap);
+      DEBUG_PRINT("Device map %u : MMWL_hsiDataRateConfig success\n\n", deviceMap);
   }
 
   /*set high speed clock configuration*/
   retVal = MMWL_setHsiClock(deviceMap, hsiClkgs);
   if (retVal != RL_RET_CODE_OK) {
-    printf(
+    DEBUG_PRINT(
       "Device map %u : MMWL_setHsiClock failed with error code %d\n\n",
       deviceMap, retVal
     );
     return -1;
   }
   else {
-    printf("Device map %u : MMWL_setHsiClock success\n\n", deviceMap);
+    DEBUG_PRINT("Device map %u : MMWL_setHsiClock success\n\n", deviceMap);
   }
 
   return retVal;
@@ -1913,7 +1867,7 @@ int MMWL_sensorStart(unsigned char deviceMap) {
  * @param deviceMap 
  * @return int 
  */
-int MMWL_StartFrame(unsigned int deviceMap) {
+int MMWL_StartFrame(unsigned char deviceMap) {
   int retVal = RL_RET_CODE_OK;
 
   /*  \subsection     api_sequence14     Seq 14 - Start mmWave Radar Sensor
@@ -1924,7 +1878,7 @@ int MMWL_StartFrame(unsigned int deviceMap) {
   */
   retVal = MMWL_sensorStart(deviceMap);
   if (retVal != RL_RET_CODE_OK) {
-    printf(
+    DEBUG_PRINT(
       "Device map %u : Sensor Start failed with error code %d \n\n",
       deviceMap, retVal
     );
@@ -1971,20 +1925,20 @@ int MMWL_sensorStop(unsigned char deviceMap) {
  * @param deviceMap 
  * @return int 
  */
-int MMWL_StopFrame(unsigned int deviceMap) {
+int MMWL_StopFrame(unsigned char deviceMap) {
   int retVal = RL_RET_CODE_OK;
 
   /* Stop the frame */
   retVal = MMWL_sensorStop(deviceMap);
   if (retVal != RL_RET_CODE_OK) {
     if (retVal == RL_RET_CODE_FRAME_ALREADY_ENDED) {
-      printf(
+      DEBUG_PRINT(
         "Device map %u : Frame is already stopped when sensorStop CMD was issued\n\n",
         deviceMap
       );
     }
     else {
-      printf(
+      DEBUG_PRINT(
         "Device map %u : Sensor Stop failed with error code %d \n\n",
         deviceMap, retVal
       );
@@ -1992,7 +1946,7 @@ int MMWL_StopFrame(unsigned int deviceMap) {
     }
   }
   else {
-    printf("Device map %u : Sensor Stop successful\n\n", deviceMap);
+    DEBUG_PRINT("Device map %u : Sensor Stop successful\n\n", deviceMap);
   }
 
   return retVal;
@@ -2011,17 +1965,16 @@ int MMWL_StopFrame(unsigned int deviceMap) {
 */
 int MMWL_powerOff(unsigned char deviceMap) {
   int retVal = RL_RET_CODE_OK;
-  mmwl_devHdl = NULL;
 
   if (deviceMap == 1) {
     retVal = rlDevicePowerOff();
     if (retVal != RL_RET_CODE_OK) {
-      printf("Device map %u : Power Off API failed with error code %d \n\n",
+      DEBUG_PRINT("Device map %u : Power Off API failed with error code %d \n\n",
         deviceMap, retVal);
       return -1;
     }
     else {
-      printf("Device map %u : Power Off API success\n\n", deviceMap);
+      DEBUG_PRINT("Device map %u : Power Off API success\n\n", deviceMap);
       mmwl_bInitComp = mmwl_bInitComp & (~deviceMap);
       mmwl_bStartComp = mmwl_bStartComp & (~deviceMap);
       mmwl_bRfInitComp = mmwl_bRfInitComp & (~deviceMap);
@@ -2031,14 +1984,14 @@ int MMWL_powerOff(unsigned char deviceMap) {
   else {
     retVal = CALL_API(API_TYPE_B | REMOVE_DEVICE_IND, deviceMap, NULL, 0);
     if (retVal != RL_RET_CODE_OK) {
-      printf(
+      DEBUG_PRINT(
         "Device map %u : Power Off API failed with error code %d \n\n",
         deviceMap, retVal
       );
       return -1;
     }
     else {
-      printf("Device map %u : Power Off API success\n\n", deviceMap);
+      DEBUG_PRINT("Device map %u : Power Off API success\n\n", deviceMap);
       mmwl_bInitComp = mmwl_bInitComp & (~deviceMap);
       mmwl_bStartComp = mmwl_bStartComp & (~deviceMap);
       mmwl_bRfInitComp = mmwl_bRfInitComp & (~deviceMap);
@@ -2096,10 +2049,12 @@ int MMWL_ApllSynthBwConfig(unsigned char deviceMap) {
 /**
  * @brief Power up device
  * 
- * @param deviceMap - Devic Index
+ * @param deviceMap - Device Index
+ * @param rlClientCbsTimeout - Timeout to use for mmwavelink client
+ * @param sopTimeout - Timeout after setting SOP mode in ms
  * @return int 
  */
-int MMWL_DevicePowerUp(unsigned int deviceMap) {
+int MMWL_DevicePowerUp(unsigned char deviceMap, uint32_t rlClientCbsTimeout, uint32_t sopTimeout) {
   int retVal = RL_RET_CODE_OK;
   TDADevHandle_t TDAImpl_devHdl = NULL;
   unsigned int devId = getDevIdFromDevMap(deviceMap);
@@ -2110,20 +2065,21 @@ int MMWL_DevicePowerUp(unsigned int deviceMap) {
   /* Set SOP Mode for the devices */
   if (TDAImpl_devHdl != NULL) {
     retVal = setSOPMode(TDAImpl_devHdl, SOPmode);
-    msleep(1); // Additional 1 msec delay 
+    msleep(1); // Additional 1 msec delay
+    msleep(sopTimeout); // Additional delay
   }
   else {
-    printf("Device map %u : Cannot get device context\n\n", deviceMap);
+    DEBUG_PRINT("Device map %u : Cannot get device context\n\n", deviceMap);
     return -1;
   }
 
   if (retVal != RL_RET_CODE_OK) {
-    printf("Device map %u : SOP 4 mode failed with error %d\n\n", deviceMap,
+    DEBUG_PRINT("Device map %u : SOP 4 mode failed with error %d\n\n", deviceMap,
       retVal);
     return -1;
   }
   else {
-    printf("Device map %u : SOP 4 mode successful\n\n", deviceMap);
+    DEBUG_PRINT("Device map %u : SOP 4 mode successful\n\n", deviceMap);
   }
 
   /* Reset the devices */
@@ -2131,19 +2087,19 @@ int MMWL_DevicePowerUp(unsigned int deviceMap) {
     retVal = resetDevice(TDAImpl_devHdl);
   }
   else {
-    printf("Device map %u : Cannot get device context\n\n", deviceMap);
+    DEBUG_PRINT("Device map %u : Cannot get device context\n\n", deviceMap);
     return -1;
   }
 
   if (retVal != RL_RET_CODE_OK) {
-    printf(
+    DEBUG_PRINT(
       "Device map %u : Device reset failed with error %d \n\n", deviceMap,
       retVal
     );
     return -1;
   }
   else {
-    printf("Device map %u : Device reset successful\n\n", deviceMap);
+    DEBUG_PRINT("Device map %u : Device reset successful\n\n", deviceMap);
   }
 
   /*  \subsection     api_sequence1     Seq 1 - Call Power ON API
@@ -2151,16 +2107,16 @@ int MMWL_DevicePowerUp(unsigned int deviceMap) {
   initializes buffers, register interrupts, bring mmWave front end out of reset.
   */
   if (deviceMap == 1) {
-    retVal = MMWL_powerOnMaster(deviceMap);
+    retVal = MMWL_powerOnMaster(deviceMap, rlClientCbsTimeout);
     if (retVal != RL_RET_CODE_OK) {
-      printf(
+      DEBUG_PRINT(
         "Device map %u : mmWave Device Power on failed with error %d \n\n",
         deviceMap, retVal
       );
       return -1;
     }
     else {
-      printf(
+      DEBUG_PRINT(
         "Device map %u : mmWave Device Power on success\n\n",
         deviceMap
       );
@@ -2171,14 +2127,15 @@ int MMWL_DevicePowerUp(unsigned int deviceMap) {
     retVal = CALL_API(API_TYPE_B | ADD_DEVICE_IND, deviceMap, NULL, 0);
     int timeoutCnt = 0;
     /* TBD - Wait for Power ON complete
-           @Note: In case of ES1.0 sample application needs to wait for MSS CPU fault as well with some timeout.
-        */
+      @Note: In case of ES1.0 sample application needs to wait for MSS CPU fault as well with some timeout.
+
+      TODO: Wait for MSS CPU fault
+    */
     if (RL_RET_CODE_OK == retVal) {
       while ((mmwl_bInitComp & deviceMap) != deviceMap) {
         msleep(1); //Sleep 1 msec
         timeoutCnt++;
-        if (timeoutCnt > MMWL_API_INIT_TIMEOUT)
-        {
+        if (timeoutCnt > MMWL_API_INIT_TIMEOUT) {
           CALL_API(API_TYPE_B | REMOVE_DEVICE_IND, deviceMap, NULL, 0);
           retVal = RL_RET_CODE_RESP_TIMEOUT;
           break;
@@ -2188,14 +2145,14 @@ int MMWL_DevicePowerUp(unsigned int deviceMap) {
     mmwl_bInitComp = mmwl_bInitComp & (~deviceMap);
 
     if (retVal != RL_RET_CODE_OK) {
-      printf(
+      DEBUG_PRINT(
         "Device map %u : mmWave Device Power on failed with error %d \n\n",
         deviceMap, retVal
       );
       return -1;
     }
     else {
-      printf(
+      DEBUG_PRINT(
         "Device map %u : mmWave Device Power on success\n\n",
         deviceMap
       );
@@ -2207,26 +2164,64 @@ int MMWL_DevicePowerUp(unsigned int deviceMap) {
 
 
 /**
- * @brief Arm the TDA for recording
+ * @brief Prepare the TDA board and notify TDA about the start of recording
  * 
+ * @param tdaArmCfgArgs Config setup to arm the TDA for recording 
  * @return int 
  */
-int MMWL_ArmingTDA() {
+int MMWL_ArmingTDA(rlTdaArmCfg_t tdaArmCfgArgs) {
   int retVal = RL_RET_CODE_OK;
   int timeOutCnt = 0U;
 
+  /* Set width and height for all devices*/
+	/* Master */
+  /*
+	retVal = setWidthAndHeight(1, mmwl_TDA_width[0], mmwl_TDA_height[0]);
+	if (retVal != RL_RET_CODE_OK) {
+		DEBUG_PRINT(
+      "ERROR: Device map 1 : Setting width = %u and height = %u failed with error code %d \n\n",
+      mmwl_TDA_width[0], mmwl_TDA_height[0], retVal
+    );
+		return -1;
+	}
+	else {
+		DEBUG_PRINT(
+      "INFO: Device map 1 : Setting width = %u and height = %u successful\n\n",
+      mmwl_TDA_width[0], mmwl_TDA_height[0]
+    );
+	}
+  */
+	for (int i = 0; i < 4; i++) {
+    retVal = setWidthAndHeight(1 << i, mmwl_TDA_width[i], mmwl_TDA_height[i]);
+    if (retVal != RL_RET_CODE_OK) {
+      DEBUG_PRINT(
+        "ERROR: Device map %u : Setting width = %u and height = %u failed with error code %d \n\n",
+        1 << (i), mmwl_TDA_width[i], mmwl_TDA_height[i], retVal
+      );
+      return -1;
+    }
+    else {
+      DEBUG_PRINT(
+        "INFO: Device map %u : Setting width = %u and height = %u successful\n\n",
+        1 << i, mmwl_TDA_width[i], mmwl_TDA_height[i]
+      );
+    }
+	}
+
+
+
   mmwl_bTDA_FramePeriodicityACK = 0U;
   /* Send frame periodicity for syncing the data being received at VIP ports */
-  retVal = sendFramePeriodicitySync(mmwl_TDA_framePeriodicity);
+  retVal = sendFramePeriodicitySync(tdaArmCfgArgs.framePeriodicity);
   if (retVal != RL_RET_CODE_OK) {
-    printf(
+    DEBUG_PRINT(
       "ERROR: Sending framePeriodicity = %u failed with error code %d \n\n",
-      mmwl_TDA_framePeriodicity, retVal
+      tdaArmCfgArgs.framePeriodicity, retVal
     );
     return -1;
   }
   else {
-    printf("INFO: Sending framePeriodicity = %u successful \n\n", mmwl_TDA_framePeriodicity);
+    DEBUG_PRINT("INFO: Sending framePeriodicity = %u successful \n\n", tdaArmCfgArgs.framePeriodicity);
   }
 
   while (1) {
@@ -2234,7 +2229,7 @@ int MMWL_ArmingTDA() {
       msleep(1); /*Sleep 1 msec*/
       timeOutCnt++;
       if (timeOutCnt > MMWL_API_TDA_TIMEOUT) {
-        printf("ERROR: Frame Periodicity Response from Capture Card timed out!\n\n");
+        DEBUG_PRINT("ERROR: Frame Periodicity Response from Capture Card timed out!\n\n");
         retVal = RL_RET_CODE_RESP_TIMEOUT;
         return retVal;
       }
@@ -2247,16 +2242,16 @@ int MMWL_ArmingTDA() {
   timeOutCnt = 0U;
   mmwl_bTDA_CaptureDirectoryACK = 0U;
   /* Send session's capture directory to TDA */
-  retVal = setSessionDirectory(mmwl_TDA_CaptureDirectory);
+  retVal = setSessionDirectory(tdaArmCfgArgs.captureDirectory);
   if (retVal != RL_RET_CODE_OK) {
-    printf(
+    DEBUG_PRINT(
       "ERROR: Sending capture directory = %s failed with error code %d \n\n",
-      mmwl_TDA_CaptureDirectory, retVal
+      tdaArmCfgArgs.captureDirectory, retVal
     );
     return -1;
   }
   else {
-    printf("INFO: Sending capture directory = %s successful \n\n", mmwl_TDA_CaptureDirectory);
+    DEBUG_PRINT("INFO: Sending capture directory = %s successful \n\n", tdaArmCfgArgs.captureDirectory);
   }
 
   while (1) {
@@ -2264,7 +2259,7 @@ int MMWL_ArmingTDA() {
       msleep(1); /*Sleep 1 msec*/
       timeOutCnt++;
       if (timeOutCnt > MMWL_API_TDA_TIMEOUT) {
-        printf("ERROR: Capture Directory Response from Capture Card timed out!\n\n");
+        DEBUG_PRINT("ERROR: Capture Directory Response from Capture Card timed out!\n\n");
         retVal = RL_RET_CODE_RESP_TIMEOUT;
         return retVal;
       }
@@ -2277,18 +2272,18 @@ int MMWL_ArmingTDA() {
   timeOutCnt = 0U;
   mmwl_bTDA_FileAllocationACK = 0U;
   /* Send number of files to be pre-allocated to TDA */
-  retVal = sendNumAllocatedFiles(mmwl_TDA_numAllocatedFiles);
+  retVal = sendNumAllocatedFiles(tdaArmCfgArgs.numberOfFilesToAllocate);
   if (retVal != RL_RET_CODE_OK) {
-    printf(
+    DEBUG_PRINT(
       "ERROR: Sending pre-allocated files = %u failed with error code %d \n\n",
-      mmwl_TDA_numAllocatedFiles, retVal
+      tdaArmCfgArgs.numberOfFilesToAllocate, retVal
     );
     return -1;
   }
   else {
-    printf(
+    DEBUG_PRINT(
       "INFO: Sending pre-allocated files = %u successful \n\n",
-      mmwl_TDA_numAllocatedFiles
+      tdaArmCfgArgs.numberOfFilesToAllocate
     );
   }
 
@@ -2297,7 +2292,7 @@ int MMWL_ArmingTDA() {
       msleep(1); /*Sleep 1 msec*/
       timeOutCnt++;
       if (timeOutCnt > MMWL_API_TDA_TIMEOUT) {
-        printf("ERROR: File Allocation Response from Capture Card timed out!\n\n");
+        DEBUG_PRINT("ERROR: File Allocation Response from Capture Card timed out!\n\n");
         retVal = RL_RET_CODE_RESP_TIMEOUT;
         return retVal;
       }
@@ -2310,18 +2305,18 @@ int MMWL_ArmingTDA() {
   timeOutCnt = 0U;
   mmwl_bTDA_DataPackagingACK = 0U;
   /* Send enable Data packing (0 : 16-bit, 1 : 12-bit) to TDA */
-  retVal = enableDataPackaging(mmwl_TDA_enableDataPacking);
+  retVal = enableDataPackaging(tdaArmCfgArgs.dataPacking);
   if (retVal != RL_RET_CODE_OK) {
-    printf(
+    DEBUG_PRINT(
       "ERROR: Sending enable data packing = %u failed with error code %d \n\n",
-      mmwl_TDA_enableDataPacking, retVal
+      tdaArmCfgArgs.dataPacking, retVal
     );
     return -1;
   }
   else {
-    printf(
+    DEBUG_PRINT(
       "INFO: Sending enable data packing = %u successful \n\n",
-      mmwl_TDA_enableDataPacking
+      tdaArmCfgArgs.dataPacking
     );
   }
 
@@ -2330,7 +2325,7 @@ int MMWL_ArmingTDA() {
       msleep(1); /*Sleep 1 msec*/
       timeOutCnt++;
       if (timeOutCnt > MMWL_API_TDA_TIMEOUT) {
-        printf("ERROR: Enable Data Packaging Response from Capture Card timed out!\n\n");
+        DEBUG_PRINT("ERROR: Enable Data Packaging Response from Capture Card timed out!\n\n");
         retVal = RL_RET_CODE_RESP_TIMEOUT;
         return retVal;
       }
@@ -2343,18 +2338,18 @@ int MMWL_ArmingTDA() {
   timeOutCnt = 0U;
   mmwl_bTDA_NumFramesToCaptureACK = 0U;
   /* Send number of frames to be captured by TDA */
-  retVal = NumFramesToCapture(mmwl_TDA_numFramesToCapture);
+  retVal = NumFramesToCapture(tdaArmCfgArgs.numberOfFramesToCapture);
   if (retVal != RL_RET_CODE_OK) {
-    printf(
+    DEBUG_PRINT(
       "ERROR: Sending number of frames to capture = %u failed with error code %d \n\n",
-      mmwl_TDA_numFramesToCapture, retVal
+      tdaArmCfgArgs.numberOfFramesToCapture, retVal
     );
     return -1;
   }
   else {
-    printf(
+    DEBUG_PRINT(
       "INFO: Sending number of frames to capture = %u successful \n\n",
-      mmwl_TDA_numFramesToCapture
+      tdaArmCfgArgs.numberOfFramesToCapture
     );
   }
 
@@ -2363,7 +2358,7 @@ int MMWL_ArmingTDA() {
       msleep(1); /*Sleep 1 msec*/
       timeOutCnt++;
       if (timeOutCnt > MMWL_API_TDA_TIMEOUT) {
-        printf("ERROR: Number of frames to be captured Response from Capture Card timed out!\n\n");
+        DEBUG_PRINT("ERROR: Number of frames to be captured Response from Capture Card timed out!\n\n");
         retVal = RL_RET_CODE_RESP_TIMEOUT;
         return retVal;
       }
@@ -2378,11 +2373,11 @@ int MMWL_ArmingTDA() {
   /* Notify TDA about creating the application */
   retVal = TDACreateApplication();
   if (retVal != RL_RET_CODE_OK) {
-    printf("ERROR: Notifying TDA about creating application failed with error code %d \n\n", retVal);
+    DEBUG_PRINT("ERROR: Notifying TDA about creating application failed with error code %d \n\n", retVal);
     return -1;
   }
   else {
-    printf("INFO: Notifying TDA about creating application successful \n\n");
+    DEBUG_PRINT("INFO: Notifying TDA about creating application successful \n\n");
   }
 
   while (1) {
@@ -2390,7 +2385,7 @@ int MMWL_ArmingTDA() {
       msleep(1); /*Sleep 1 msec*/
       timeOutCnt++;
       if (timeOutCnt > MMWL_API_TDA_TIMEOUT*3) {
-        printf("ERROR: Create Application Response from Capture Card timed out!\n\n");
+        DEBUG_PRINT("ERROR: Create Application Response from Capture Card timed out!\n\n");
         retVal = RL_RET_CODE_RESP_TIMEOUT;
         return retVal;
       }
@@ -2405,11 +2400,11 @@ int MMWL_ArmingTDA() {
   /* Notify TDA about starting the frame */
   retVal = startRecord();
   if (retVal != RL_RET_CODE_OK) {
-    printf("ERROR: Notifying TDA about start frame failed with error code %d \n\n", retVal);
+    DEBUG_PRINT("ERROR: Notifying TDA about start frame failed with error code %d \n\n", retVal);
     return -1;
   }
   else {
-    printf("INFO: Notifying TDA about start frame successful \n\n");
+    DEBUG_PRINT("INFO: Notifying TDA about start frame successful \n\n");
     mmwl_bTDA_ARMDone = 1U;
   }
 
@@ -2418,7 +2413,7 @@ int MMWL_ArmingTDA() {
       msleep(1); /*Sleep 1 msec*/
       timeOutCnt++;
       if (timeOutCnt > MMWL_API_TDA_TIMEOUT) {
-        printf("ERROR: Start Record Response from Capture Card timed out!\n\n");
+        DEBUG_PRINT("ERROR: Start Record Response from Capture Card timed out!\n\n");
         retVal = RL_RET_CODE_RESP_TIMEOUT;
         return retVal;
       }
@@ -2445,11 +2440,11 @@ int MMWL_DeArmingTDA() {
   /* Notify TDA about stopping the frame */
   retVal = stopRecord();
   if (retVal != RL_RET_CODE_OK) {
-    printf("ERROR: Notifying TDA about stop frame failed with error code %d \n\n", retVal);
+    DEBUG_PRINT("ERROR: Notifying TDA about stop frame failed with error code %d \n\n", retVal);
     return -1;
   }
   else {
-    printf("INFO: Notifying TDA about stop frame successful \n\n");
+    DEBUG_PRINT("INFO: Notifying TDA about stop frame successful \n\n");
     mmwl_bTDA_ARMDone = 0U;
   }
 
@@ -2458,7 +2453,7 @@ int MMWL_DeArmingTDA() {
       msleep(1); /*Sleep 1 msec*/
       timeOutCnt++;
       if (timeOutCnt > MMWL_API_TDA_TIMEOUT*2) {
-        printf("ERROR: TDA Stop Record ACK not received!");
+        DEBUG_PRINT("ERROR: TDA Stop Record ACK not received!");
         retVal = RL_RET_CODE_RESP_TIMEOUT;
         return retVal;
       }
@@ -2486,12 +2481,12 @@ int MMWL_DeviceDeInit(unsigned int deviceMap) {
   Measurement data is stored in 'rcvGpAdcData' structure after this API call. */
   retVal = MMWL_gpadcMeasConfig(deviceMap);
   if (retVal != RL_RET_CODE_OK) {
-    printf("Device map %u : GPAdc measurement API failed with error code %d \n\n",
+    DEBUG_PRINT("Device map %u : GPAdc measurement API failed with error code %d \n\n",
       deviceMap, retVal);
     return -1;
   }
   else {
-    printf("Device map %u : GPAdc measurement API success\n\n", deviceMap);
+    DEBUG_PRINT("Device map %u : GPAdc measurement API success\n\n", deviceMap);
   }
 
   return retVal;
@@ -2499,35 +2494,35 @@ int MMWL_DeviceDeInit(unsigned int deviceMap) {
 
 
 /**
- * @brief 
+ * @brief Connect to ethernet and init TDA board
  * 
- * @return int 
+ * @param ipAddr IP Address of the TDA board (default: 192.168.33.30)
+ * @param port Port number to communication with the TDA (default: 5001)
+ * @param deviceMap All cascaded device map
+ * @return int Initialization status
  */
-int MMWL_TDAInit() {
+int MMWL_TDAInit(unsigned char *ipAddr, unsigned int port, uint8_t deviceMap) {
   int retVal = RL_RET_CODE_OK;
   int timeOutCnt = 0;
 
   /* Register Async event handler with TDA */
   retVal = registerTDAStatusCallback((TDA_EVENT_HANDLER)TDA_asyncEventHandler);
   if (retVal != RL_RET_CODE_OK) {
-    printf(
+    DEBUG_PRINT(
       "ERROR: Registering Async event handler with TDA failed with error %d \n\n",
       retVal
     );
     return -1;
   }
   else {
-    printf("INFO: Registered Async event handler with TDA \n\n");
+    DEBUG_PRINT("INFO: Registered Async event handler with TDA \n\n");
   }
 
   mmwl_bTDA_CaptureCardConnect = 0U;
   /* Connect to the TDA Capture card */
-  retVal = ethernetConnect(
-    mmwl_TDA_IPAddress, mmwl_TDA_ConfigPort,
-    mmwl_TDA_DeviceMapCascadedAll
-  );
+  retVal = ethernetConnect(ipAddr, port, deviceMap);
   if (retVal != RL_RET_CODE_OK) {
-    printf(
+    DEBUG_PRINT(
       "ERROR: Connecting to TDA failed with error %d. Check whether the capture card is connected to the network! \n\n",
       retVal
     );
@@ -2538,7 +2533,7 @@ int MMWL_TDAInit() {
       msleep(1); /*Sleep 1 msec*/
       timeOutCnt++;
       if (timeOutCnt > MMWL_API_TDA_TIMEOUT) {
-        printf("ERROR: No Acknowlegment received from the capture card! \n\n");
+        DEBUG_PRINT("ERROR: No Acknowlegment received from the capture card! \n\n");
         retVal = RL_RET_CODE_RESP_TIMEOUT;
         return retVal;
       }
@@ -2549,7 +2544,7 @@ int MMWL_TDAInit() {
   }
 
   if (retVal == RL_RET_CODE_OK) {
-    printf("INFO: Connection to TDA successful! \n\n");
+    DEBUG_PRINT("INFO: Connection to TDA successful! \n\n");
   }
 
   return retVal;
@@ -2561,26 +2556,22 @@ int MMWL_TDAInit() {
  * 
  * @return int 
  */
-int MMWL_AssignDeviceMap(rlDevGlobalCfg_t rlDevGlobalCfgArgs) {
+int MMWL_AssignDeviceMap(unsigned char deviceMap, uint8_t* masterMap, uint8_t* slavesMap) {
   int retVal = RL_RET_CODE_OK;
-  unsigned char deviceMap = rlDevGlobalCfgArgs.CascadeDeviceMap;
   unsigned char devId = 0;
+  *slavesMap = 0;
 
   if ((deviceMap & 1) == 0) {
     return RL_RET_CODE_INVALID_INPUT;
   }
 
-  for (devId = 0; devId < 4; devId++) {
+  // ID 0: master
+  *masterMap = 1;
+
+  // ID 1-3: slaves
+  for (devId = 1; devId < 4; devId++) {
     if ((deviceMap & (1 << devId)) != 0) {
-      if (devId == 0) {
-        mmwl_TDA_DeviceMapCascadedMaster |= (1 << devId);
-        mmwl_TDA_DeviceMapCascadedAll |= (1 << devId);
-      }
-      else {
-        mmwl_TDA_SlavesEnabled[devId - 1] = 1;
-        mmwl_TDA_DeviceMapCascadedSlaves |= (1 << devId);
-        mmwl_TDA_DeviceMapCascadedAll |= (1 << devId);
-      }
+      *slavesMap |= (1 << devId);
     }
   }
 

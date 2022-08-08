@@ -982,7 +982,7 @@ extern "C" {
 * If set to '4' and Cascade setup- mmWaveLink will send commands to all the devices in parallel.
 */
 #ifndef RL_CASCADE_NUM_DEVICES
-#define RL_CASCADE_NUM_DEVICES               (1U)
+#define RL_CASCADE_NUM_DEVICES               (4U)
 #endif
 
 /*! \brief

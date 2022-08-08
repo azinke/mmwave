@@ -90,16 +90,6 @@ uint32_t magicWord = 0;
  ******************************************************************************
  */
 
-/*! \brief
-* Function used for logging the messages
-*/
-#if defined(DEBUG) && DEBUG > 0
- #define DEBUG_PRINT(fmt, args...) \
-  fprintf(stderr, "DEBUG: %s:%d:%s(): " fmt, __FILE__, __LINE__, __func__, ##args)
-#else
- #define DEBUG_PRINT(fmt, args...) /* Don't do anything in release builds */
-#endif
-
 extern void CloseTraceFile();
 
 
@@ -121,12 +111,10 @@ void* Network_waitConnect(void* lpParam) {
     int32_t status = Network_waitRead(&gNetwork_SockObj);
 
     /* If information is available */
-    if (status == 1)
-    {
+    if (status == 1) {
       /* Read header response */
       int32_t response = RecvResponse(&prmSize);
-      if (response != SYSTEM_LINK_STATUS_SOK)
-      {
+      if (response != SYSTEM_LINK_STATUS_SOK) {
         /* Notify mmWaveStudio about network error */
         gTDACARD_Callback(1, CAPTURE_RESPONSE_NETWORK_ERROR, 0, response, NULL);
         break;
@@ -340,7 +328,7 @@ STATUS Radar_processData(Radar_EthDataPacketPrms *pDataPacket_ptr, uint32_t prmS
       DEBUG_PRINT("# INFO: Received HOST_IRQ_HIGH command from device %d\n", \
         dev_id);
       TDADevCtx_t*   pDevCtx = (TDADevCtx_t *)TDAGetDeviceCtx(dev_id);
-      event_set(&pDevCtx->hostIntrThread.eventHandle);
+      sem_post(&pDevCtx->hostIntrThread.eventHandle);
       pDevCtx->hostIrqRxHigh = 1;
       break;
     }
@@ -456,8 +444,7 @@ STATUS ethernetConnect(unsigned char *ipAddr, uint32_t configPort, uint32_t devi
 
   //Send TDA version command
   status = readDLLVersion();
-  if (status != SYSTEM_LINK_STATUS_SOK)
-  {
+  if (status != SYSTEM_LINK_STATUS_SOK) {
     DEBUG_PRINT("# ERROR: TDA version command failed\n");
     return SYSTEM_LINK_STATUS_EFAIL;
   }
@@ -884,7 +871,7 @@ STATUS TDAregisterCallback(uint8_t devSelection, EVENT_HANDLER RF_EventCallback,
     TDAUnlockDevice(pDevCtx);
     if (pDevCtx->hostIntrThread.threadHdl) {
       TDAStopIrqPollingThread(pDevCtx);
-      pDevCtx->hostIntrThread.threadHdl = (pthread_t) NULL;
+      pDevCtx->hostIntrThread.threadHdl = 0;
     }
     return RLS_RET_CODE_OK;
   }
@@ -1650,7 +1637,6 @@ TDADevCtx_t* TDAInitDeviceCtx(unsigned char ucDevId) {
     pDevCtx->hostIntrThread.handler = 0;
     pDevCtx->hostIntrThread.pValue = 0;
     pthread_mutex_init(&pDevCtx->cs, NULL);
-    // InitializeCriticalSection(&(pDevCtx->cs));
   }
 
   return pDevCtx;
@@ -1663,7 +1649,6 @@ int TDAClearDeviceCtx(TDADevCtx_t* pDevCtx) {
   if (pDevCtx != NULL) {
     /* Delete Critical Section */
     pthread_mutex_destroy(&pDevCtx->cs);
-    // DeleteCriticalSection(&(pDevCtx->cs));
     /* Clear device context */
     pDevCtx->deviceEnabled = FALSE;
     retVal = RLS_RET_CODE_OK;
@@ -1721,12 +1706,11 @@ void* TDAHostIrqThread(void* pParam) {
   TDA_NumOfRunningSPIThreads++;
 
   while (TDA_HostIntrThreadLoop[pDevCtx->deviceIndex]) {
-    event_wait(&pDevCtx->hostIntrThread.eventHandle);
+    sem_wait(&pDevCtx->hostIntrThread.eventHandle);
     if ((!pDevCtx->deviceEnabled) || (NULL == pDevCtx->hostIntrThread.handler) || \
-      (pDevCtx->irqMasked)) {
+        (pDevCtx->irqMasked)) {
       continue;
     } else {
-      event_init(&pDevCtx->hostIntrThread.eventHandle);
       pDevCtx->hostIntrThread.handler(pDevCtx->deviceIndex, (TDADevHandle_t)pDevCtx);
     }
 
@@ -1743,11 +1727,11 @@ int TDADisableDeviceThread(unsigned char deviceIndex) {
 
   if (pDevCtx->hostIntrThread.threadHdl) {
     TDA_HostIntrThreadLoop[pDevCtx->deviceIndex] = 0;
-    event_set(&pDevCtx->hostIntrThread.eventHandle);
+    sem_post(&pDevCtx->hostIntrThread.eventHandle);
     /* Wait for polling thread to terminate */
     pthread_join(pDevCtx->hostIntrThread.threadHdl, NULL);
-    event_destroy(&pDevCtx->hostIntrThread.eventHandle);
-    pDevCtx->hostIntrThread.threadHdl = (pthread_t) NULL;
+    sem_destroy(&pDevCtx->hostIntrThread.eventHandle);
+    pDevCtx->hostIntrThread.threadHdl = 0;
 
   }
 
@@ -1771,9 +1755,9 @@ int TDAEnableDeviceThread(unsigned char deviceIndex) {
     if (NULL != pDevCtx->hostIntrThread.handler) {
       TDA_HostIntrThreadLoop[pDevCtx->deviceIndex] = 0;
       if (pDevCtx->hostIrqRxHigh == 1) {
-        pDevCtx->hostIntrThread.eventHandle = event_create(TRUE);
+        sem_init(&pDevCtx->hostIntrThread.eventHandle, 1, 1);
       } else {
-        pDevCtx->hostIntrThread.eventHandle = event_create(FALSE);
+        sem_init(&pDevCtx->hostIntrThread.eventHandle, 1, 0);
       }
       /* Create Host IRQ Polling Thread */
       pthread_create(&pDevCtx->hostIntrThread.threadHdl, NULL, TDAHostIrqThread, pDevCtx);
@@ -1795,10 +1779,11 @@ int TDADisableDevice(unsigned char deviceIndex) {
   pDevCtx = (TDADevCtx_t *)TDAGetDeviceCtx(deviceIndex);
   pDevCtx->deviceEnabled = FALSE;
 
-  if (pDevCtx->hostIntrThread.threadHdl) {
+  if (pDevCtx->hostIntrThread.threadHdl != 0) {
+    DEBUG_PRINT("Disabling device %u \n", deviceIndex);
     TDAStopIrqPollingThread(pDevCtx);
-    pthread_cancel(pDevCtx->hostIntrThread.threadHdl);
-    pDevCtx->hostIntrThread.threadHdl = (pthread_t) NULL;
+    // pthread_cancel(pDevCtx->hostIntrThread.threadHdl);
+    pDevCtx->hostIntrThread.threadHdl = 0;
   }
 
   Sleep(200);
@@ -1814,6 +1799,7 @@ int TDAEnableDevice(unsigned char deviceIndex) {
   pDevCtx = (TDADevCtx_t *)TDAGetDeviceCtx(deviceIndex);
 
   if (NULL != pDevCtx) {
+    DEBUG_PRINT("Dev %d enabled!\n", pDevCtx->deviceIndex);
     pDevCtx->deviceEnabled = TRUE;
     /* Starting Interrupt Thread after Power on to avoid Spurious Interrupt */
     if (NULL != pDevCtx->hostIntrThread.handler) {
@@ -1822,6 +1808,7 @@ int TDAEnableDevice(unsigned char deviceIndex) {
   }
   else {
     retVal = RLS_RET_CODE_EFAIL;
+    DEBUG_PRINT("Dev %d failed with status!\n");
   }
 
   return retVal;
@@ -1829,7 +1816,6 @@ int TDAEnableDevice(unsigned char deviceIndex) {
 
 
 int TDALockDevice(TDADevCtx_t*  pDevCtx) {
-  // EnterCriticalSection();
   pthread_mutex_lock(&pDevCtx->cs);
   return RLS_RET_CODE_OK;
 }
@@ -1837,7 +1823,6 @@ int TDALockDevice(TDADevCtx_t*  pDevCtx) {
 
 int TDAUnlockDevice(TDADevCtx_t*  pDevCtx) {
   pthread_mutex_unlock(&pDevCtx->cs);
-  // LeaveCriticalSection(&pDevCtx->cs);
   return RLS_RET_CODE_OK;
 }
 
@@ -1924,11 +1909,11 @@ void* TDAPollingThreadEntrySpi(void* pParam) {
     /* Check if Interrupt handler is registered */
     if (pDevCtx->hostIntrThread.handler) {
       pDevCtx->hostIntrThread.handler(pDevCtx->deviceIndex, (TDADevHandle_t)pDevCtx);
-    }
+    } else DEBUG_PRINT("Interrupt handler not registered\n");
 
     if (TDA_NumOfRunningSPIThreads > TDA_NUM_CONNECTED_DEVICES_MAX) {
       TDA_NumOfRunningSPIThreads--;
-      pDevCtx->hostIntrThread.threadHdl = (pthread_t) NULL;
+      pDevCtx->hostIntrThread.threadHdl = 0;
       return NULL; // RLS_RET_CODE_OK
     }
   }
@@ -1982,8 +1967,7 @@ int TDAStopIrqPollingThread(TDADevCtx_t* pDevCtx) {
   pthread_t currThread = pthread_self();
 
   if (pDevCtx->deviceIndex != 0) {
-    pthread_cancel(pDevCtx->hostIntrThread.threadHdl);
-    pDevCtx->hostIntrThread.threadHdl = (pthread_t) NULL;
+    pDevCtx->hostIntrThread.threadHdl = 0;
     return RLS_RET_CODE_OK;
   }
 
@@ -1992,13 +1976,12 @@ int TDAStopIrqPollingThread(TDADevCtx_t* pDevCtx) {
   if (pDevCtx->hostIntrThread.threadHdl && !pthread_equal(pDevCtx->hostIntrThread.threadHdl, currThread)) {
     /* Wait for polling thread to terminate */
     pthread_join(pDevCtx->hostIntrThread.threadHdl, NULL);
-    // WaitForSingleObject(pDevCtx->hostIntrThread.threadHdl, INFINITE);
   }
 
-  pDevCtx->hostIntrThread.threadHdl = (pthread_t) NULL;
-  gTDA_devCtx[1].hostIntrThread.threadHdl = (pthread_t) NULL;
-  gTDA_devCtx[2].hostIntrThread.threadHdl = (pthread_t) NULL;
-  gTDA_devCtx[3].hostIntrThread.threadHdl = (pthread_t) NULL;
+  pDevCtx->hostIntrThread.threadHdl = 0;
+  gTDA_devCtx[1].hostIntrThread.threadHdl = 0;
+  gTDA_devCtx[2].hostIntrThread.threadHdl = 0;
+  gTDA_devCtx[3].hostIntrThread.threadHdl = 0;
 
   return RLS_RET_CODE_OK;
 }
@@ -2242,7 +2225,7 @@ int SendCommand(void *params, int prmSize) {
   status = Network_write(&gNetwork_SockObj, (uint8_t*)&cmdHeader, sizeof(cmdHeader));
   if (status < 0) {
     DEBUG_PRINT("# ERROR: Could not write header\n");
-        return status;
+    return status;
   }
 
   status = Network_write(&gNetwork_SockObj, (uint8_t*)params, prmSize);

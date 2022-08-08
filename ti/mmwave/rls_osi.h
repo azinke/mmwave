@@ -1,41 +1,42 @@
 /*
  * rls_osi.h - mmWaveLink OS Callback Implementation on Linux
  *
- * Copyright (C) 2014 Texas Instruments Incorporated - http://www.ti.com/ 
- * 
- * 
- *  Redistribution and use in source and binary forms, with or without 
- *  modification, are permitted provided that the following conditions 
+ * Copyright (C) 2014 Texas Instruments Incorporated - http://www.ti.com/
+ *
+ *
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions
  *  are met:
  *
- *    Redistributions of source code must retain the above copyright 
+ *    Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  *
  *    Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the 
- *    documentation and/or other materials provided with the   
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the
  *    distribution.
  *
  *    Neither the name of Texas Instruments Incorporated nor the names of
  *    its contributors may be used to endorse or promote products derived
  *    from this software without specific prior written permission.
  *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
- *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
- *  OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- *  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+ *  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ *  OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ *  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
  *  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
  *  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
- *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+ *  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  *
  * Updated by: AMOUSSOU Zinsou Kenneth
  * @date: 07-19-2022
 */
+
 /****************************************************************************************
  * FILE INCLUSION PROTECTION
  ****************************************************************************************
@@ -46,8 +47,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <pthread.h>
-
-#include "../ethernet/src/event.h"
+#include <semaphore.h>
 
 
 /******************************************************************************
@@ -87,47 +87,47 @@ typedef enum osiReturnVal
 #define ENTER_CRITICAL_SECTION
 #define EXIT_CRITICAL_SECTION
 
-/*! 
+/*!
 *    \brief Type definition for a time value
 
-*    \note On each porting or platform the type could be whatever is needed - integer, 
+*    \note On each porting or platform the type could be whatever is needed - integer,
  pointer to structure etc.
 */
 typedef unsigned int osiTime_t;
 
 /*!
     \brief type definition for a sync object container
-    
+
     Sync object is object used to synchronize between two threads or thread and interrupt handler.
     One thread is waiting on the object and the other thread send a signal, which then
     release the waiting thread.
     The signal must be able to be sent from interrupt context.
     This object is generally implemented by binary semaphore or events.
-        
+
     \note On each porting or platform the type could be whatever is needed - integer, structure etc.
 */
-typedef EVENT osiSyncObj_t;
+typedef sem_t* osiSyncObj_t;
 
 /*!
     \brief type definition for a locking object container
-    
-    Locking object are used to protect a resource from mutual accesses of two or more threads. 
+
+    Locking object are used to protect a resource from mutual accesses of two or more threads.
     The locking object should suppurt reentrant locks by a signal thread.
     This object is generally implemented by mutex semaphore
-    
+
     \note On each porting or platform the type could be whatever is needed - integer, structure etc.
 */
-typedef pthread_mutex_t osiLockObj_t;
+typedef pthread_mutex_t* osiLockObj_t;
 
 /*!
     \brief type definition for a spawn entry callback
 
-    the spawn mechanism enable to run a function on different context. 
+    the spawn mechanism enable to run a function on different context.
     This mechanism allow to transfer the execution context from interrupt context to thread context
     or changing teh context from an unknown user thread to general context.
-    The implementation of the spawn mechanism depends on the user's system reqeuirements and could varies 
+    The implementation of the spawn mechanism depends on the user's system reqeuirements and could varies
     from implementation of serialized execution using signle thread to creating thread per call
-    
+
     \note The stack size of the execution thread must be at least of TBD bytes!
 */
 typedef void (*rlsSpawnEntryFunc_t)(const void *);
@@ -135,12 +135,12 @@ typedef void (*rlsSpawnEntryFunc_t)(const void *);
 /*!
     \brief type definition for a spawn Task Function
 
-    the spawn mechanism enable to run a function on different context(Task). 
+    the spawn mechanism enable to run a function on different context(Task).
     This mechanism allow to transfer the execution context from interrupt context to thread context
     or changing teh context from an unknown user thread to general context.
-    The implementation of the spawn mechanism depends on the user's system reqeuirements and could varies 
+    The implementation of the spawn mechanism depends on the user's system reqeuirements and could varies
     from implementation of serialized execution using signle thread to creating thread per call
-    
+
 */
 typedef void (*P_OSI_SPAWN)(void *);
 
@@ -155,7 +155,7 @@ typedef void (*P_OSI_SPAWN)(void *);
 *   @brief This is OS Sleep Function
 *   @param[in] Duration - Delay in milliseconds
 *
-*   @return int Success - 0, Failure - Error Code 
+*   @return int Success - 0, Failure - Error Code
 *
 *   This is OS Sleep Function
 */
@@ -171,9 +171,9 @@ EXPORT int osiSleep(uint32_t Duration);
 *   @param[in] pSyncObj - pointer to the sync object control block
 *   @param[in] pName - Name of sync object
 *
-*   @return int Success - 0, Failure - Error Code 
+*   @return int Success - 0, Failure - Error Code
 *
-*   The sync object is used for synchronization between diffrent thread or ISR and 
+*   The sync object is used for synchronization between diffrent thread or ISR and
 *   a thread.
 */
 /* SourceId :  */
@@ -187,7 +187,7 @@ EXPORT int osiSyncObjCreate(osiSyncObj_t* pSyncObj,char* pName);
 *   @brief This function deletes a sync object
 *   @param[in] pSyncObj - pointer to the sync object control block
 *
-*   @return int Success - 0, Failure - Error Code 
+*   @return int Success - 0, Failure - Error Code
 *
 */
 /* SourceId :  */
@@ -198,10 +198,10 @@ EXPORT int osiSyncObjDelete(osiSyncObj_t* pSyncObj);
 
 /** @fn int osiSyncObjSignal(osiSyncObj_t* pSyncObj)
 *
-*   @brief This function generates a sync signal for the object. 
+*   @brief This function generates a sync signal for the object.
 *   @param[in] pSyncObj - pointer to the sync object control block
 *
-*   @return int Success - 0, Failure - Error Code 
+*   @return int Success - 0, Failure - Error Code
 *
 */
 /* SourceId :  */
@@ -213,13 +213,13 @@ EXPORT int osiSyncObjSignal(osiSyncObj_t* pSyncObj);
 *
 *   @brief This function waits for a sync signal of the specific sync object
 *   @param[in] pSyncObj - pointer to the sync object control block
-*   @param[in] Timeout - numeric value specifies the maximum number of mSec to 
+*   @param[in] Timeout - numeric value specifies the maximum number of mSec to
                             stay suspended while waiting for the sync signal
                             Currently, the mmWave link driver uses only two values:
                                 - OSI_WAIT_FOREVER
                                 - OSI_NO_WAIT
 *
-*   @return int Success - 0, Failure - Error Code 
+*   @return int Success - 0, Failure - Error Code
 *
 */
 /* SourceId :  */
@@ -233,7 +233,7 @@ EXPORT int osiSyncObjWait(osiSyncObj_t* pSyncObj, osiTime_t Timeout);
 *   @brief This function clears a sync object
 *   @param[in] pSyncObj - pointer to the sync object control block
 *
-*   @return int Success - 0, Failure - Error Code 
+*   @return int Success - 0, Failure - Error Code
 *
 */
 /* SourceId :  */
@@ -248,9 +248,9 @@ EXPORT int osiSyncObjClear(osiSyncObj_t* pSyncObj);
 *   @param[in] pSyncObj - pointer to the locking object control block
 *   @param[in] pName - Name of locking object
 *
-*   @return int Success - 0, Failure - Error Code 
+*   @return int Success - 0, Failure - Error Code
 *
-*   The locking object is used for protecting a shared resources between different 
+*   The locking object is used for protecting a shared resources between different
 *   threads.
 */
 /* SourceId :  */
@@ -264,7 +264,7 @@ EXPORT int osiLockObjCreate(osiLockObj_t* pLockObj, char* pName);
 *   @brief This function deletes a locking object
 *   @param[in] pSyncObj - pointer to the locking object control block
 *
-*   @return int Success - 0, Failure - Error Code 
+*   @return int Success - 0, Failure - Error Code
 */
 /* SourceId :  */
 /* DesignId :  */
@@ -275,13 +275,13 @@ EXPORT int osiLockObjDelete(osiLockObj_t* pLockObj);
 *
 *   @brief This function locks a locking object
 *   @param[in] pSyncObj - pointer to the locking object control block
-*   @param[in] Timeout - numeric value specifies the maximum number of mSec to 
+*   @param[in] Timeout - numeric value specifies the maximum number of mSec to
                             stay suspended while waiting for the locking object
                             Currently, the mmWave link driver uses only two values:
                                 - OSI_WAIT_FOREVER
                                 - OSI_NO_WAIT
 *
-*   @return int Success - 0, Failure - Error Code 
+*   @return int Success - 0, Failure - Error Code
 */
 /* SourceId :  */
 /* DesignId :  */
@@ -293,7 +293,7 @@ EXPORT int osiLockObjLock(osiLockObj_t* pLockObj , osiTime_t Timeout);
 *   @brief This function unlock a locking object
 *   @param[in] pSyncObj - pointer to the locking object control block
 *
-*   @return int Success - 0, Failure - Error Code 
+*   @return int Success - 0, Failure - Error Code
 */
 /* SourceId :  */
 /* DesignId :  */
@@ -309,7 +309,7 @@ EXPORT int osiLockObjUnlock(osiLockObj_t* pLockObj);
                             passed to pEntry callback from the execution thread.
 *   @param[in] flags - execution flags - reserved for future usage
 *
-*   @return int Success - 0, Failure - Error Code 
+*   @return int Success - 0, Failure - Error Code
 */
 /* SourceId :  */
 /* DesignId :  */
@@ -325,7 +325,7 @@ EXPORT  int osiSpawn(rlsSpawnEntryFunc_t pEntry , const void* pValue , unsigned 
                             passed to pEntry callback from the execution thread.
 *   @param[in] flags - execution flags - reserved for future usage
 *
-*   @return int Success - 0, Failure - Error Code 
+*   @return int Success - 0, Failure - Error Code
 */
 /* SourceId :  */
 /* DesignId :  */
@@ -348,7 +348,7 @@ EXPORT unsigned long osiGetTime(void);
 
 #ifdef  __cplusplus
 }
-#endif 
+#endif
 
 #endif
 /*
