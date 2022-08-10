@@ -1,17 +1,26 @@
 /**
  * @file mimo.c
  * @author AMOUSSOU Z. Kenneth (www.gitlab.com/azinke)
- * @brief MMWave Radar in MIMO setup
+ * @brief MMWave Radar configuration and control tool
+ *
+ * @note: Only MIMO setup is supported for now
  *
  * The MMWCAS-RF-EVM revision E has AWR2243 radar chips
  *
  * @version 0.1
  * @date 2022-07-21
- * 
+ *
  * @copyright Copyright (c) 2022
- * 
+ *
  */
+#include <string.h>
+#include <signal.h>
 #include "ti/mmwave/mmwave.h"
+#include "opt/opt.h"
+
+#define PROG_NAME       "mmwave"              // Name of the program
+#define PROG_VERSION    "0.1"                 // Program version
+#define PROG_COPYRIGHT  "Copyright (C) 2022"
 
 /* Enable development environment
   Status messages are printed. Set to '0' to disable the
@@ -474,6 +483,34 @@ void CloseTraceFile() {
   }
 }
 
+// Pointer to the CLI option parser
+parser_t *g_parser = NULL;
+
+/**
+ * Print program version
+ */
+void print_version() {
+  printf(PROG_NAME " version " PROG_VERSION ", " PROG_COPYRIGHT "\n");
+  exit(0);
+}
+
+/**
+ * @brief Free the parser to cleanup any dynamically allocated memory
+ */
+void cleanup() {
+  free_parser(g_parser);
+}
+
+/**
+ * @brief Called when the user presses CTRL+C
+ *
+ * This aim to explicitly call the exit function so that
+ * dynamically allocated memory could be freed
+ */
+void signal_handler () {
+  exit(1);
+}
+
 
 /**
  * @brief Application entry point
@@ -483,7 +520,104 @@ void CloseTraceFile() {
  * @return int 
  */
 int main (int argc, char *argv[]) {
-  DEBUG_PRINT("MMWave MIMO Application\n");
+  DEBUG_PRINT("MMWave EVM configuration and control application\n");
+  unsigned char default_ip_addr[] = "192.168.33.180";
+  unsigned int default_port = 5001U;
+  unsigned char capture_path[128];
+  strcpy(capture_path, "/mnt/ssd/");  // Root capture path
+  unsigned char default_capture_directory[64];
+  sprintf(default_capture_directory, "%s_%lu", "MMWL_Capture", (unsigned long int)time(NULL));
+  int status = 0;
+
+  parser_t parser = init_parser(
+    PROG_NAME,
+    "Configuration and control tool for TI MMWave cascade Evaluation Module"
+  );
+  g_parser = &parser;
+
+  atexit(cleanup);  // Call the cleanup function before exiting the program
+  signal(SIGINT, signal_handler);  // Catch CTRL+C to enable memory deallocation
+
+  option_t opt_capturedir = {
+    .args = "-d",
+    .argl = "--capture-dir",
+    .help = "Name of the director where to store recordings on the DSP board",
+    .type = OPT_STR,
+    .default_value = default_capture_directory
+  };
+  add_arg(&parser, &opt_capturedir);
+
+  option_t opt_port = {
+    .args = "-p",
+    .argl = "--port",
+    .help = "Port number the DSP board server app is listening on",
+    .type = OPT_INT,
+    .default_value = &default_port,
+  };
+  add_arg(&parser, &opt_port);
+
+  option_t opt_ipaddr = {
+    .args = "-i",
+    .argl = "--ip-addr",
+    .help = "IP Address of the MMWCAS DSP evaluation module",
+    .type = OPT_STR,
+    .default_value = default_ip_addr,
+  };
+  add_arg(&parser, &opt_ipaddr);
+
+  option_t opt_config= {
+    .args = "-c",
+    .argl = "--configure",
+    .help = "Configure the MMWCAS-RF-EVM board",
+    .type = OPT_BOOL,
+  };
+  add_arg(&parser, &opt_config);
+
+  option_t opt_record= {
+    .args = "-r",
+    .argl = "--record",
+    .help = "Trigger data recording. This assumes that configuration is completed. "
+            "Valid values are: ('start', 'stop', 'oneshot')",
+    .type = OPT_STR,
+  };
+  add_arg(&parser, &opt_record);
+
+  option_t opt_help = {
+    .args = "-h",
+    .argl = "--help",
+    .help = "Print help and exit.",
+    .type = OPT_BOOL,
+    .default_value = NULL,
+  };
+  add_arg(&parser, &opt_help);
+
+  option_t opt_version = {
+    .args = "-v",
+    .argl = "--version",
+    .help = "Print program version and exit.",
+    .type = OPT_BOOL,
+    .callback = print_version,
+  };
+  add_arg(&parser, &opt_version);
+
+  parse(&parser, argc, argv);
+
+  // Print help
+  if ((unsigned char*)get_option(&parser, "help") != NULL) {
+    print_help(&parser);
+    exit(0);
+  }
+
+  unsigned char *ip_addr = (unsigned char*)get_option(&parser, "ip-addr");
+  unsigned int port = *(unsigned int*)get_option(&parser, "port");
+  unsigned char *capture_directory = (unsigned char*)get_option(&parser, "capture-dir");
+  strcat(capture_path, capture_directory);
+  /* Record CLI option possible values are:
+   *  - start: To start a recording and exit
+   *  - stop: Stop a recording and exit
+   *  - oneshot: Start a recording, wait for it's complemention and stop it.
+   */
+  unsigned char *record = (unsigned char*)get_option(&parser, "record");
 
   // Configuration
   devConfig_t config;
@@ -505,15 +639,9 @@ int main (int argc, char *argv[]) {
   config.lpmCfg = lpmCfgArgs;
   config.miscCfg = miscCfgArgs;
 
-  unsigned char ipAddr[] = "192.168.33.180";
-  unsigned int port = 5001U;
-  int status = 0;
-
-  unsigned char captureDirectory[] = "/mnt/ssd/MMWL_Capture";
-
   // config to ARM the TDA
   rlTdaArmCfg_t tdaCfg = {
-    .captureDirectory = captureDirectory,
+    .captureDirectory = capture_path,
     .framePeriodicity = config.frameCfg.framePeriodicity,
     .numberOfFilesToAllocate = 0,
     .numberOfFramesToCapture = config.frameCfg.numFrames * 4,
@@ -521,35 +649,47 @@ int main (int argc, char *argv[]) {
   };
 
   // Connect to TDA
-  status = MMWL_TDAInit(ipAddr, port, config.deviceMap);
+  status = MMWL_TDAInit(ip_addr, port, config.deviceMap);
   check(status,
     "[MMWCAS-DSP] TDA Connected!",
     "[MMWCAS-DSP] Couldn't connect to TDA board!\n", 32, TRUE);
 
-  // Start configuration
-  configure(config);
-
-  msleep(100);
-
-  MMWL_ArmingTDA(tdaCfg);
-
-  msleep(1000);
-
-  // Start framing
-  for (int i = 3; i >=0; i--) {
-    MMWL_StartFrame(1U << i);
+  if ((unsigned char *)get_option(&parser, "configure") != NULL) {
+    // Start configuration
+    configure(config);
+    msleep(100);
   }
-  // MMWL_StartFrame(config.masterMap);
-  msleep(4000);
+  if (record != NULL) {
+    unsigned char is_start = (strcmp(record, "start") == 0);
+    unsigned char is_stop = (strcmp(record, "stop") == 0);
+    unsigned char is_oneshot = (strcmp(record, "oneshot") == 0);
 
-  // Stop framing
-  for (int i = 3; i >= 0; i--) {
-    MMWL_StopFrame(1U << i);
+    if (is_start || is_oneshot){
+      // Arm TDA and start framing
+      MMWL_ArmingTDA(tdaCfg);
+
+      msleep(1000);
+
+      // Start framing
+      for (int i = 3; i >=0; i--) {
+        MMWL_StartFrame(1U << i);
+      }
+      msleep(100);
+    }
+    if (is_oneshot)  {
+      // MMWL_StartFrame(config.masterMap);
+      msleep(4000);
+    }
+    if (is_stop || is_oneshot) {
+      // Stop framing
+      for (int i = 3; i >= 0; i--) {
+        MMWL_StopFrame(1U << i);
+      }
+
+      MMWL_DeArmingTDA();
+      msleep(2000);
+    }
   }
-  // MMWL_StopFrame(config.masterMap);
-
-  MMWL_DeArmingTDA();
-  msleep(2000);
   // power off device
   return 0;
 }
