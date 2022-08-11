@@ -29,7 +29,7 @@
 */
 #define DEV_ENV    1
 
-#define NUM_CHRIPS 16
+#define NUM_CHIRPS 12
 
 #define CRED      "\e[0;31m"    // Terminal code for regular red text
 #define CGREEN    "\e[0;32m"    // Terminal code for regular greed text
@@ -62,6 +62,9 @@ typedef struct devConfig {
 
   // ADC output config
   rlAdcOutCfg_t adcOutCfg;
+
+  // Data format config
+  rlDevDataFmtCfg_t dataFmtCfg;
 
   // LDO Bypass config
   rlRfLdoBypassCfg_t ldoCfg;
@@ -115,7 +118,7 @@ const rlFrameCfg_t frameCfgArgs = {
   .chirpStartIdx = 0,
   .chirpEndIdx = 11,
   .numFrames = 100,               // (0 for infinite)
-  .numLoops = NUM_CHRIPS,
+  .numLoops = 16,
   .numAdcSamples = 2 * 256,       // Complex samples (for I and Q siganls)
   .frameTriggerDelay = 0x0,
   .framePeriodicity = 20000000,   // 100ms | 1LSB = 5ns
@@ -127,6 +130,10 @@ rlChirpCfg_t chirpCfgArgs = {
   .chirpEndIdx = 0,
   .profileId = 0,
   .txEnable = 0x00,
+  .adcStartTimeVar = 0,
+  .idleTimeVar = 0,
+  .startFreqVar = 0,
+  .freqSlopeVar = 0,
 };
 
 /** Channel config */
@@ -145,9 +152,20 @@ rlAdcOutCfg_t adcOutCfgArgs = {
   }
 };
 
+/** Data format config */
+rlDevDataFmtCfg_t dataFmtCfgArgs = {
+  .iqSwapSel = 0,           // I first
+  .chInterleave = 0,        // Interleaved mode
+  .rxChannelEn = 0xF,       // All RX antenna enabled
+  .adcFmt = 1,              // Complex
+  .adcBits = 2,             // 16-bit ADC
+};
+
 /** LDO Bypass config */
 rlRfLdoBypassCfg_t ldoCfgArgs = {
   .ldoBypassEnable = 3,       // RF LDO disabled, PA LDO disabled
+  .ioSupplyIndicator = 0,
+  .supplyMonIrDrop = 0,
 };
 
 /** Low Power Mode config */
@@ -240,7 +258,7 @@ uint32_t configureMimoChirp(uint8_t devId, rlChirpCfg_t chirpCfg) {
   };
   int status = 0;
 
-  for (uint8_t i = 0; i < NUM_CHRIPS; i++) {
+  for (uint8_t i = 0; i < NUM_CHIRPS; i++) {
     int8_t txIdx = is_in_table(i, chripTxTable[devId], 3);
 
     // Update chirp config
@@ -249,12 +267,11 @@ uint32_t configureMimoChirp(uint8_t devId, rlChirpCfg_t chirpCfg) {
     if (txIdx < 0) chirpCfg.txEnable = 0x00;
     else chirpCfg.txEnable = (1 << txIdx);
     status += MMWL_chirpConfig(createDevMapFromDevId(devId), chirpCfg);
-#if DEV_ENV
-    if (status < 0) {
+    DEBUG_PRINT("[CHIRP CONFIG] dev %u, chirp idx %u, status: %d\n", devId, i, status);
+    if (status != 0) {
       DEBUG_PRINT("Configuration of chirp %d failed!\n", i);
       break;
     }
-#endif
   }
   return status;
 }
@@ -276,7 +293,7 @@ uint32_t configureMimoChirp(uint8_t devId, rlChirpCfg_t chirpCfg) {
 void check(int status, const char *success_msg, const char *error_msg,
       unsigned char deviceMap, uint8_t is_required) {
 #if DEV_ENV
-  printf("STATUS %d | DEV MAP: %u | ", status, deviceMap);
+  printf("STATUS %4d | DEV MAP: %2u | ", status, deviceMap);
 #endif
   if (status == RL_RET_CODE_OK) {
 #if DEV_ENV
@@ -407,6 +424,11 @@ uint32_t configure (devConfig_t config) {
     "[ALL] LDO Bypass configuration successful!",
     "[ALL] LDO Bypass configuration failed!", config.deviceMap, TRUE);
 
+  status += MMWL_dataFmtConfig(config.deviceMap, config.dataFmtCfg);
+  check(status,
+    "[ALL] Data format configuration successful!",
+    "[ALL] Data format configuration failed!", config.deviceMap, TRUE);
+
   status += MMWL_lowPowerConfig(config.deviceMap, config.lpmCfg);
   check(status,
     "[ALL] Low Power Mode configuration successful!",
@@ -466,8 +488,8 @@ uint32_t configure (devConfig_t config) {
     "[SLAVE] Frame configuration failed!", config.slavesMap, TRUE);
 
   check(status,
-    "[MIMO] Configuration completed!",
-    "[MIMO] Configuration completed with error!", config.slavesMap, TRUE);
+    "[MIMO] Configuration completed!\n",
+    "[MIMO] Configuration completed with error!", config.deviceMap, TRUE);
 }
 
 
@@ -491,6 +513,14 @@ parser_t *g_parser = NULL;
  */
 void print_version() {
   printf(PROG_NAME " version " PROG_VERSION ", " PROG_COPYRIGHT "\n");
+  exit(0);
+}
+
+/**
+ * @brief Print CLI options help and exit
+ */
+void help() {
+  print_help(g_parser);
   exit(0);
 }
 
@@ -576,18 +606,18 @@ int main (int argc, char *argv[]) {
   option_t opt_record= {
     .args = "-r",
     .argl = "--record",
-    .help = "Trigger data recording. This assumes that configuration is completed. "
-            "Valid values are: ('start', 'stop', 'oneshot')",
-    .type = OPT_STR,
+    .help = "Trigger data recording. This assumes that configuration is completed.",
+    .type = OPT_BOOL,
   };
   add_arg(&parser, &opt_record);
 
   option_t opt_help = {
     .args = "-h",
     .argl = "--help",
-    .help = "Print help and exit.",
+    .help = "Print CLI option help and exit.",
     .type = OPT_BOOL,
     .default_value = NULL,
+    .callback = help,
   };
   add_arg(&parser, &opt_help);
 
@@ -630,6 +660,7 @@ int main (int argc, char *argv[]) {
   config.profileCfg = profileCfgArgs;
   config.chirpCfg = chirpCfgArgs;
   config.adcOutCfg = adcOutCfgArgs;
+  config.dataFmtCfg = dataFmtCfgArgs;
   config.channelCfg = channelCfgArgs;
   config.csi2LaneCfg = csi2LaneCfgArgs;
   config.datapathCfg = datapathCfgArgs;
@@ -639,57 +670,67 @@ int main (int argc, char *argv[]) {
   config.lpmCfg = lpmCfgArgs;
   config.miscCfg = miscCfgArgs;
 
+  /**
+   * @note: The adcOutCfg is used to overwrite the dataFmtCfg
+   *
+   * In a unified config file, it'll make for sense to have a single
+   * source of truth for the ADC data format. And therefore use the
+   * same data for setting both.
+   */
+  config.dataFmtCfg.rxChannelEn = channelCfgArgs.rxChannelEn;
+  config.dataFmtCfg.adcBits = adcOutCfgArgs.fmt.b2AdcBits;
+  config.dataFmtCfg.adcFmt = adcOutCfgArgs.fmt.b2AdcOutFmt;
+
   // config to ARM the TDA
   rlTdaArmCfg_t tdaCfg = {
     .captureDirectory = capture_path,
-    .framePeriodicity = config.frameCfg.framePeriodicity,
+    .framePeriodicity = (frameCfgArgs.framePeriodicity * 5)/(1000*1000),
     .numberOfFilesToAllocate = 0,
-    .numberOfFramesToCapture = config.frameCfg.numFrames * 4,
+    .numberOfFramesToCapture = 0, // config.frameCfg.numFrames,
     .dataPacking = 0, // 0: 16-bit | 1: 12-bit
   };
 
-  // Connect to TDA
-  status = MMWL_TDAInit(ip_addr, port, config.deviceMap);
-  check(status,
-    "[MMWCAS-DSP] TDA Connected!",
-    "[MMWCAS-DSP] Couldn't connect to TDA board!\n", 32, TRUE);
-
   if ((unsigned char *)get_option(&parser, "configure") != NULL) {
+    // Connect to TDA
+    status = MMWL_TDAInit(ip_addr, port, config.deviceMap);
+    check(status,
+      "[MMWCAS-DSP] TDA Connected!",
+      "[MMWCAS-DSP] Couldn't connect to TDA board!\n", 32, TRUE);
+
     // Start configuration
     configure(config);
-    msleep(100);
+    msleep(2000);
   }
-  if (record != NULL) {
-    unsigned char is_start = (strcmp(record, "start") == 0);
-    unsigned char is_stop = (strcmp(record, "stop") == 0);
-    unsigned char is_oneshot = (strcmp(record, "oneshot") == 0);
 
-    if (is_start || is_oneshot){
-      // Arm TDA and start framing
-      MMWL_ArmingTDA(tdaCfg);
+  if ((unsigned char *)get_option(&parser, "record") != NULL) {
+    // Arm TDA
+    status = MMWL_ArmingTDA(tdaCfg);
+    check(status,
+      "[MMWCAS-DSP] Arming TDA",
+      "[MMWCAS-DSP] TDA Arming failed!\n", 32, TRUE);
 
-      msleep(1000);
+    msleep(2000);
 
-      // Start framing
-      for (int i = 3; i >=0; i--) {
-        MMWL_StartFrame(1U << i);
-      }
-      msleep(100);
+    // Start framing
+    for (int i = 3; i >=0; i--) {
+      status += MMWL_StartFrame(1U << i);
     }
-    if (is_oneshot)  {
-      // MMWL_StartFrame(config.masterMap);
-      msleep(4000);
-    }
-    if (is_stop || is_oneshot) {
-      // Stop framing
-      for (int i = 3; i >= 0; i--) {
-        MMWL_StopFrame(1U << i);
-      }
+    check(status,
+      "[MMWCAS-RF] Framing ...",
+      "[MMWCAS-RF] Failed to initiate framing!\n", config.deviceMap, TRUE);
 
-      MMWL_DeArmingTDA();
-      msleep(2000);
+    msleep(4000);
+
+    // Stop framing
+    for (int i = 3; i >= 0; i--) {
+      status += MMWL_StopFrame(1U << i);
     }
+
+    status += MMWL_DeArmingTDA();
+    check(status,
+      "[MMWCAS-RF] Stop recording",
+      "[MMWCAS-RF] Failed to de-arm TDA board!\n", 32, TRUE);
+    msleep(1000);
   }
-  // power off device
   return 0;
 }
