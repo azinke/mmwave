@@ -264,7 +264,7 @@ typedef uint8_t BOOLEAN;
 #define RLS_RET_CODE_EFAIL                          (-1)
 
 #ifndef DEBUG
-#define DEBUG 1
+#define DEBUG 0
 #endif
 
 /*! \brief

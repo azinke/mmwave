@@ -5,3 +5,6 @@ output/
 
 # Generated documentation folder
 html/
+
+# Generated executable
+mmwave

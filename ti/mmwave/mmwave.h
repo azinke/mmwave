@@ -262,7 +262,7 @@ int MMWL_rfInit(unsigned char deviceMap);
 /* RF Device configuration */
 int MMWL_RFDeviceConfig(unsigned char deviceMap);
 
-/*Lowpower configuration*/
+/*Low power configuration*/
 int MMWL_lowPowerConfig(unsigned char deviceMap, rlLowPowerModeCfg_t rfLpModeCfgArgs);
 /* APLL Synth BW configuration */
 int MMWL_ApllSynthBwConfig(unsigned char deviceMap);

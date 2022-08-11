@@ -1388,29 +1388,21 @@ int MMWL_rfInit(unsigned char deviceMap) {
   mmwl_bRfInitComp = mmwl_bRfInitComp & (~deviceMap);
 
   // if (rlDevGlobalCfgArgs.CalibEnable == TRUE) {
-    rlRfInitCalConf_t rfCalibCfgArgs = { 0 };
+  rlRfInitCalConf_t rfCalibCfgArgs = { 0 };
 
-    /* Calibration store */
-    // if (rlDevGlobalCfgArgs.CalibStoreRestore == 1) {
-      /* Enable only required boot-time calibrations, by default all are enabled in the device */
-     rfCalibCfgArgs.calibEnMask = 0x1FF0;
-    // }
-    /* Calibration restore */
-    // else {
-      /* Disable all the boot-time calibrations, by default all are enabled in the device */
-     // rfCalibCfgArgs.calibEnMask = 0x0;
-    // }
-    /* RF Init Calibration Configuration */
-    retVal = CALL_API(RF_INIT_CALIB_CONFIG_IND, deviceMap, &rfCalibCfgArgs, 0);  
-    if (retVal != RL_RET_CODE_OK) {
-      DEBUG_PRINT("Device map %u : RF Init Calibration Configuration failed with error %d \n\n",
-        deviceMap, retVal);
-      return -1;
-    }
-    else {
-      DEBUG_PRINT("Device map %u : RF Init Calibration Configuration success \n\n", deviceMap);
-    }
-  // }
+  /* Enable only required boot-time calibrations, by default all are enabled in the device */
+  rfCalibCfgArgs.calibEnMask = 0x1FF0;
+
+  /* RF Init Calibration Configuration */
+  retVal = CALL_API(RF_INIT_CALIB_CONFIG_IND, deviceMap, &rfCalibCfgArgs, 0);
+  if (retVal != RL_RET_CODE_OK) {
+    DEBUG_PRINT("Device map %u : RF Init Calibration Configuration failed with error %d \n\n",
+      deviceMap, retVal);
+    return -1;
+  }
+  else {
+    DEBUG_PRINT("Device map %u : RF Init Calibration Configuration success \n\n", deviceMap);
+  }
 
   /* Run boot time calibrations */
   retVal = CALL_API(API_TYPE_B | RF_INIT_IND, deviceMap, NULL, 0);
@@ -1467,7 +1459,6 @@ int MMWL_profileConfig(unsigned char deviceMap, rlProfileCfg_t profileCfgArgs) {
 */
 int MMWL_chirpConfig(unsigned char deviceMap, rlChirpCfg_t chirpCfgArgs) {
   int retVal = RL_RET_CODE_OK;
-  rlChirpCfg_t setChirpCfgArgs[2] = {0};
   DEBUG_PRINT(
     "Device map %u : Calling rlSetChirpConfig with \nProfileId[%d]\nStart Idx[%d]\nEnd Idx[%d] | Tx [%d]\n\n",
     deviceMap, chirpCfgArgs.profileId,
@@ -1477,7 +1468,7 @@ int MMWL_chirpConfig(unsigned char deviceMap, rlChirpCfg_t chirpCfgArgs) {
   );
 
   /* With this API we can configure max 512 chirp in one call */
-  retVal = CALL_API(API_TYPE_C | SET_CHIRP_CONFIG_IND, deviceMap, &chirpCfgArgs, 2U);
+  retVal = CALL_API(API_TYPE_C | SET_CHIRP_CONFIG_IND, deviceMap, &chirpCfgArgs, 1U);
   return retVal;
 }
 
