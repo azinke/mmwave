@@ -117,7 +117,7 @@ const rlProfileCfg_t profileCfgArgs = {
 const rlFrameCfg_t frameCfgArgs = {
   .chirpStartIdx = 0,
   .chirpEndIdx = 11,
-  .numFrames = 100,               // (0 for infinite)
+  .numFrames = 0,               // (0 for infinite)
   .numLoops = 16,
   .numAdcSamples = 2 * 256,       // Complex samples (for I and Q siganls)
   .frameTriggerDelay = 0x0,
@@ -558,6 +558,7 @@ int main (int argc, char *argv[]) {
   unsigned char default_capture_directory[64];
   sprintf(default_capture_directory, "%s_%lu", "MMWL_Capture", (unsigned long int)time(NULL));
   int status = 0;
+  float default_recording_duration = 1.0;   // min
 
   parser_t parser = init_parser(
     PROG_NAME,
@@ -611,6 +612,15 @@ int main (int argc, char *argv[]) {
   };
   add_arg(&parser, &opt_record);
 
+  option_t opt_record_duration= {
+    .args = "-t",
+    .argl = "--time",
+    .help = "Indicate how long the recording should last in minutes. Default: 1 min",
+    .type = OPT_FLOAT,
+    .default_value = &default_recording_duration,
+  };
+  add_arg(&parser, &opt_record_duration);
+
   option_t opt_help = {
     .args = "-h",
     .argl = "--help",
@@ -648,6 +658,8 @@ int main (int argc, char *argv[]) {
    *  - oneshot: Start a recording, wait for it's complemention and stop it.
    */
   unsigned char *record = (unsigned char*)get_option(&parser, "record");
+  float record_duration = *(float*)get_option(&parser, "time");
+  record_duration *= 60 * 1000;  // convert into milliseconds
 
   // Configuration
   devConfig_t config;
@@ -719,7 +731,7 @@ int main (int argc, char *argv[]) {
       "[MMWCAS-RF] Framing ...",
       "[MMWCAS-RF] Failed to initiate framing!\n", config.deviceMap, TRUE);
 
-    msleep(4000);
+    msleep((unsigned long int)record_duration);
 
     // Stop framing
     for (int i = 3; i >= 0; i--) {
