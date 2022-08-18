@@ -7,6 +7,13 @@
  *
  * The MMWCAS-RF-EVM revision E has AWR2243 radar chips
  *
+ * Approximate default configuration (generated uing mmWave Sensing Estimator):
+ *
+ *  Max Detectable Range  : ~80m
+ *  Range resolution      : ~31cm
+ *  May Velocity          : ~6.49 km/h
+ *  Velocity resolution   : ~0.4 km/h
+ *
  * @version 0.1
  * @date 2022-07-21
  *
@@ -99,15 +106,15 @@ const rlProfileCfg_t profileCfgArgs = {
   .profileId = 0,
   .pfVcoSelect = 0x02,
   .startFreqConst = 1435384036,   // 77GHz | 1 LSB = 53.644 Hz
-  .freqSlopeConst = 1637,         // 79.0327 Mhz/us | 1LSB = 48.279 kHz/uS
+  .freqSlopeConst = 311,          // 15.0148 Mhz/us | 1LSB = 48.279 kHz/uS
   .idleTimeConst = 500,           // 5us  | 1LSB = 10ns
   .adcStartTimeConst = 600,       // 6us  | 1LSB = 10ns
   .rampEndTime = 4000,            // 40us | 1LSB = 10ns
   .txOutPowerBackoffCode = 0x0,
   .txPhaseShifter = 0x0,
-  .txStartTime = 0x0,
+  .txStartTime = 0x0,             // 0us | 1LSB = 10ns
   .numAdcSamples = 256,           // 256 ADC samples per chirp
-  .digOutSampleRate = 8000,       // 8000 ksps (8 MHz) | 1LSB = 1 ksps
+  .digOutSampleRate = 8000,      // 8000 ksps (8 MHz) | 1LSB = 1 ksps
   .hpfCornerFreq1 = 0x0,          // 175kHz
   .hpfCornerFreq2 = 0x0,          // 350kHz
   .rxGain = 48,                   // 48 dB | 1LSB = 1dB
@@ -117,7 +124,7 @@ const rlProfileCfg_t profileCfgArgs = {
 const rlFrameCfg_t frameCfgArgs = {
   .chirpStartIdx = 0,
   .chirpEndIdx = 11,
-  .numFrames = 0,               // (0 for infinite)
+  .numFrames = 0,                 // (0 for infinite)
   .numLoops = 16,
   .numAdcSamples = 2 * 256,       // Complex samples (for I and Q siganls)
   .frameTriggerDelay = 0x0,
