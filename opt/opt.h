@@ -16,7 +16,7 @@
 extern "C" {
 #endif
 
-#define ARG_VALUE_SIZE      16
+#define ARG_VALUE_SIZE      200
 
 
 #define OPT_SUCCESS         0

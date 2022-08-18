@@ -1,0 +1,32 @@
+#
+# MMWCAS-RF-EVM configuration file
+#
+# Setup:
+#   - Max Range: 15m
+#   - Range resolution: 5cm
+
+[mimo]  # MIMO Configuration
+
+
+[mimo.profile]
+id = 0
+startFrequency = 77                             # Start frequency in GHz
+frequencySlope = 79.0327                        # Chrip slope in MHz/us
+idleTime = 5                                    # ADC idle time in us
+adcStartTime = 6                                # ADC start time in us
+rampEndTime = 40                                # Chrip ramp end time in us
+txStartTime = 0                                 # TX start time in us
+numAdcSamples = 256                             # Number of ADC samples per chrip
+adcSamplingFrequency = 8000                     # ADC sampling frequency in ksps
+rxGain = 48                                     # RX Gain in dB
+
+
+[mimo.frame]
+numFrames = 0                                   # Number of frames to record
+numLoops = 16                                   # Number of chirp loops per frame
+framePeriodicity = 100                          # Frame periodicity in ms
+
+
+[mimo.channel]
+rxChannelEn = 15                                # Enabled RX antenna bit field
+txChannelEn = 7                                 # Enabled TX Antenna bit field

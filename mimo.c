@@ -20,82 +20,8 @@
  * @copyright Copyright (c) 2022
  *
  */
-#include <string.h>
-#include <signal.h>
-#include "ti/mmwave/mmwave.h"
-#include "opt/opt.h"
-
-#define PROG_NAME       "mmwave"              // Name of the program
-#define PROG_VERSION    "0.1"                 // Program version
-#define PROG_COPYRIGHT  "Copyright (C) 2022"
-
-/* Enable development environment
-  Status messages are printed. Set to '0' to disable the
-  development environment. Hence, no status feedback will
-  be printed
-*/
-#define DEV_ENV    1
-
-#define NUM_CHIRPS 12
-
-#define CRED      "\e[0;31m"    // Terminal code for regular red text
-#define CGREEN    "\e[0;32m"    // Terminal code for regular greed text
-#define CRESET    "\e[0m"       // Clear reset terminal color
-
-
-/** Device configuration */
-typedef struct devConfig {
-
-  // Device Map (1: Master, 2: Slave1, 4: Slave2, 8: Slave3)
-  uint8_t deviceMap;
-
-  // Master device map (value: 1)
-  uint8_t masterMap;
-
-  // Slave devices map (value: 14)
-  uint8_t slavesMap;
-
-  // Frame config
-  rlFrameCfg_t frameCfg;
-
-  // Profile config
-  rlProfileCfg_t profileCfg;
-
-  // Chirp config
-  rlChirpCfg_t chirpCfg;
-
-  // Channel config
-  rlChanCfg_t channelCfg;
-
-  // ADC output config
-  rlAdcOutCfg_t adcOutCfg;
-
-  // Data format config
-  rlDevDataFmtCfg_t dataFmtCfg;
-
-  // LDO Bypass config
-  rlRfLdoBypassCfg_t ldoCfg;
-
-  // Low Power mode config config
-  rlLowPowerModeCfg_t lpmCfg;
-
-  // Miscellaneous config.
-  rlRfMiscConf_t miscCfg;
-
-  // Datapath config
-  rlDevDataPathCfg_t datapathCfg;
-
-  // Datapath clock config
-  rlDevDataPathClkCfg_t datapathClkCfg;
-
-  // High Speed clock config
-  rlDevHsiClk_t hsClkCfg;
-
-  // CSI2 config
-  rlDevCsi2Cfg_t csi2LaneCfg;
-
-} devConfig_t;
-
+#include "mimo.h"
+#include "toml/config.h"
 
 /******************************
  *      CONFIGURATIONS
@@ -603,7 +529,7 @@ int main (int argc, char *argv[]) {
   };
   add_arg(&parser, &opt_ipaddr);
 
-  option_t opt_config= {
+  option_t opt_config = {
     .args = "-c",
     .argl = "--configure",
     .help = "Configure the MMWCAS-RF-EVM board",
@@ -611,7 +537,7 @@ int main (int argc, char *argv[]) {
   };
   add_arg(&parser, &opt_config);
 
-  option_t opt_record= {
+  option_t opt_record = {
     .args = "-r",
     .argl = "--record",
     .help = "Trigger data recording. This assumes that configuration is completed.",
@@ -619,7 +545,7 @@ int main (int argc, char *argv[]) {
   };
   add_arg(&parser, &opt_record);
 
-  option_t opt_record_duration= {
+  option_t opt_record_duration = {
     .args = "-t",
     .argl = "--time",
     .help = "Indicate how long the recording should last in minutes. Default: 1 min",
@@ -627,6 +553,15 @@ int main (int argc, char *argv[]) {
     .default_value = &default_recording_duration,
   };
   add_arg(&parser, &opt_record_duration);
+
+  option_t opt_config_file = {
+    .args = "-f",
+    .argl = "--cfg",
+    .help = "TOML Configuration file. Overwrite the default config when provided",
+    .type = OPT_STR,
+    .default_value = NULL,
+  };
+  add_arg(&parser, &opt_config_file);
 
   option_t opt_help = {
     .args = "-h",
@@ -668,6 +603,8 @@ int main (int argc, char *argv[]) {
   float record_duration = *(float*)get_option(&parser, "time");
   record_duration *= 60 * 1000;  // convert into milliseconds
 
+  unsigned char *config_filename = (unsigned char*)get_option(&parser, "cfg");
+
   // Configuration
   devConfig_t config;
 
@@ -688,6 +625,11 @@ int main (int argc, char *argv[]) {
   config.ldoCfg = ldoCfgArgs;
   config.lpmCfg = lpmCfgArgs;
   config.miscCfg = miscCfgArgs;
+
+  if (config_filename != NULL) {
+    // Read parameters from config file
+    read_config(config_filename, &config);
+  }
 
   /**
    * @note: The adcOutCfg is used to overwrite the dataFmtCfg
