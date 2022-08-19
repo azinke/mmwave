@@ -39,6 +39,10 @@ all: mmwlink mmwethernet mmwave cliopt tomlconfig
 
 build: all
 
+install: all
+	@sudo cp -f ./mmwave /usr/bin
+	@rm -f ./mmwave
+
 clean:
 	@rm -f *.o
 	@rm -f mmwave
