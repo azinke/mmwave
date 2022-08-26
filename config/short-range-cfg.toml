@@ -19,6 +19,8 @@ txStartTime = 0                                 # TX start time in us
 numAdcSamples = 256                             # Number of ADC samples per chrip
 adcSamplingFrequency = 8000                     # ADC sampling frequency in ksps
 rxGain = 48                                     # RX Gain in dB
+hpfCornerFreq1 = 0                              # High Pass Filter 1 corner frequency | 0: 175 kHz, 1: 235 kHz, 2: 350 kHz, 3: 700 kHz
+hpfCornerFreq2 = 0                              # High Pass Filter 2 corner frequency | 0: 350 kHz, 1: 700 kHz, 2: 1.4 MHz, 3: 2.8 MHz
 
 
 [mimo.frame]

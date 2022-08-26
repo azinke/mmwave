@@ -119,6 +119,22 @@ void read_mimo_config(toml_table_t* configfile, devConfig_t *config) {
             } else {
                 DEBUG_PRINT(CONFIG_FIELD_ERROR_MSG "'rxGain'\n");
             }
+
+            // hpfCornerFreq1
+            data = toml_int_in(profile, "hpfCornerFreq1");
+            if (data.ok) {
+                config->profileCfg.hpfCornerFreq1 = (uint8_t)data.u.i;
+            } else {
+                DEBUG_PRINT(CONFIG_FIELD_ERROR_MSG "'hpfCornerFreq1'\n");
+            }
+
+            // hpfCornerFreq2
+            data = toml_int_in(profile, "hpfCornerFreq2");
+            if (data.ok) {
+                config->profileCfg.hpfCornerFreq2 = (uint8_t)data.u.i;
+            } else {
+                DEBUG_PRINT(CONFIG_FIELD_ERROR_MSG "'hpfCornerFreq2'\n");
+            }
         }
 
         // [FRAME CONFIGURATION]
