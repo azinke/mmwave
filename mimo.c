@@ -183,7 +183,7 @@ int8_t is_in_table(uint8_t value, uint8_t *table, uint8_t size) {
  * @return uint32_t Configuration status
  */
 uint32_t configureMimoChirp(uint8_t devId, rlChirpCfg_t chirpCfg) {
-  static uint8_t chripTxTable [4][3] = {
+  const uint8_t chripTxTable [4][3] = {
     {11, 10, 9},   // Dev1 - Master
     {8, 7, 6},     // Dev2
     {5, 4, 3},     // Dev3
