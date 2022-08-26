@@ -1794,7 +1794,7 @@ int MMWL_gpadcMeasConfig(unsigned char deviceMap) {
   int timeOutCnt = 0;
   rlGpAdcCfg_t gpadcCfg = {0};
 
-  /* enable all the sensors [0-6] to read gpADC measurement data */
+  /* enable all the sensors [0-5] to read gpADC measurement data */
   gpadcCfg.enable = 0x3F;
   /* set the number of samples device needs to collect to do the measurement */
   gpadcCfg.numOfSamples[0].sampleCnt = 32;
@@ -1803,7 +1803,6 @@ int MMWL_gpadcMeasConfig(unsigned char deviceMap) {
   gpadcCfg.numOfSamples[3].sampleCnt = 32;
   gpadcCfg.numOfSamples[4].sampleCnt = 32;
   gpadcCfg.numOfSamples[5].sampleCnt = 32;
-  gpadcCfg.numOfSamples[6].sampleCnt = 32;
 
   retVal = CALL_API(SET_GPADC_CONFIG, deviceMap, &gpadcCfg, 0);
   if(retVal == RL_RET_CODE_OK) {

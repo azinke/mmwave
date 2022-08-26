@@ -52,7 +52,6 @@ int add_arg(parser_t* parser, option_t *option) {
 
   argc->next = NULL;
   argc->opt = option;
-  memset(argc->opt->value, 0, ARG_VALUE_SIZE);
   argc->is_set = 0;
 
   if (parser->first_arg == NULL) {
@@ -78,6 +77,7 @@ int add_arg(parser_t* parser, option_t *option) {
 void free_parser(parser_t *parser) {
   while(parser->last_arg != NULL) {
     arg_t *previous = (arg_t*) parser->last_arg->previous;
+    free(parser->last_arg->opt->value);
     free(parser->last_arg);
     parser->last_arg = previous;
   }
@@ -136,26 +136,32 @@ int parse(parser_t *parser, int argc, char* argv[]) {
         switch (arg->opt->type) {
           case OPT_BOOL: {
             // Set the boolean as "True" when present
+            arg->opt->value = (unsigned char*)malloc(sizeof(char));
             *(arg->opt->value) = 1;
             break;
           }
           case OPT_SHORT: {
+            arg->opt->value = (unsigned char*)malloc(sizeof(short));
             sscanf(argv[idx+1], "%hi", (short*)arg->opt->value);
             idx++; // skip the next CLI entry
             break;
           }
           case OPT_INT: {
+            arg->opt->value = (unsigned char*)malloc(sizeof(int));
             sscanf(argv[idx+1], "%d", (int*)arg->opt->value);
             idx++; // skip the next CLI entry
             break;
           }
           case OPT_FLOAT: {
+            arg->opt->value = (unsigned char*)malloc(sizeof(float));
             sscanf(argv[idx+1], "%f", (float*)arg->opt->value);
             idx++; // skip the next CLI entry
             break;
           }
           case OPT_STR: {
-            sscanf(argv[idx+1], "%s", arg->opt->value);
+            size_t size = strlen(argv[idx+1]);
+            arg->opt->value = (unsigned char*)malloc(size);
+            strncpy(arg->opt->value, argv[idx+1], size);
             idx++; // skip the next CLI entry
             break;
           }

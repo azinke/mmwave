@@ -16,9 +16,6 @@
 extern "C" {
 #endif
 
-#define ARG_VALUE_SIZE      200
-
-
 #define OPT_SUCCESS         0
 
 #define EOPT_MEM_ALLOC      (-1)
@@ -114,7 +111,7 @@ typedef struct cli_option {
    *
    * Memory will be dynamically allocated to store the value
    */
-  char value[ARG_VALUE_SIZE];
+  unsigned char *value;
 
 } option_t;
 
