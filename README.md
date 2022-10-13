@@ -2,10 +2,10 @@
 
 The MMWCAS-RF-EVM and MMWCAS-DSP-EVM boards from Texas Instruments (TI) are supported
 with the TI-provided software `mmwave studio`. As so, one needs a Windows OS and Matlab
-runtime engine to try out the millimeter wave radars and their capabilites.
+runtime engine to try out the millimeter wave radars and their capabilities.
 
-This tool is a linux driver for the RF and DSP boards, to enable the recording of data
-from a linux OS. As so, it can be build to run on embedbeded linux devices such as
+This tool is a Linux driver for the RF and DSP boards, to enable the recording of data
+from a Linux OS. As so, it can be built to run on embedded Linux devices such as
 Raspberry Pi or so.
 
 `mmwave` is based on the `mmwavelink` library and build out of the example source
@@ -18,8 +18,8 @@ codes provided by TI.
 
 ## Installation
 
-All the third-party libraries needed are already present in the respositoy.
-`mmwave` can then be install as follow:
+All the third-party libraries needed are already present in the repository.
+`mmwave` can then be installed as follows:
 
 ```bash
     git clone <mmwave-repository-git-url>
@@ -113,6 +113,10 @@ dataFmt:
     iqSwapSel: 0                            # I first
 ```
 
+If the capture directory is not indicated (with the `-d` option), the capture folder is
+automatically created as `MMW_Capture_<timestamp>`; with `<timesamp>` is placeholder for
+the Unix timestamp at which the command has been issued.
+
 ### Self-defined configuration
 
 It's possible to define custom configurations suitable for a given recording setup
@@ -125,14 +129,14 @@ With a config file, one can use the command below:
 mmwave -f <path-to-config-file> --configure --record --time <duration-in-min>
 
 # Example
-mmwave -f config/short-range-cfg.toml --configure --record -time 2
+mmwave -f config/short-range-cfg.toml --configure --record --time 2
 ```
 
 ### Check and copy recorded data
 
 With the MMWCAS-DSP-EVM board, recordings are saved on its embedded Solid State
 Drive (SSD). To check that the recording has proceeded and is successful, you can
-log over `ssh` onto the DSP board as follow:
+log over `ssh` onto the DSP board as follows:
 
 ```bash
 # Use the IP address of the DSP board
@@ -157,7 +161,7 @@ scp root@192.168.33.180:/mnt/ssd/outdoor0 /home/user/rwu-radar
 
 ## Developer note
 
-The structure of the repository is as follow:
+The structure of the repository is as follows:
 
 ```txt
 .
@@ -209,7 +213,7 @@ from TI or by copying them from the installation folder of `mmwave studio` and
 
 The folders `ti/ethernet` and `ti/mmwave` are based on examples source files provided by
 TI. Since the original sources were only compatible with windows, these have been modified
-to operate on linux OS. One can update these modules to extend the capabilities of this driver.
+to operate on Linux OS. One can update these modules to extend the capabilities of this driver.
 
 - The folder `opt` holds the source handling the CLI option parsing
 - The `toml` folder handles the parsing of configuration files.
