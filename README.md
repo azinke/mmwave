@@ -1,4 +1,4 @@
-# mmwave
+# MMWAVE
 
 The MMWCAS-RF-EVM and MMWCAS-DSP-EVM boards from Texas Instruments (TI) are supported
 with the TI-provided software `mmwave studio`. As so, one needs a Windows OS and Matlab
@@ -35,23 +35,23 @@ You can first check if `mmwave` is properly installed by typing the `help` comma
  mmwave -h
 ```
 
-You shall the see a help menu similar to the one below.
+You shall see a help menu similar to the one below.
 
 ```txt
-usage: mmwave [-d] [-p] [-i] [-c] [-r] [-t] [-f] [-h] [-v]
+usage: mmwave [command] [option]
 
-Configuration and control tool for TI MMWave cascade Evaluation Module
+Configuration and control tool for TI MMWave Evaluation Modules
 
-options:
-    -d, --capture-dir              Name of the director where to store recordings on the DSP board 
-    -p, --port                     Port number the DSP board server app is listening on 
-    -i, --ip-addr                  IP Address of the MMWCAS DSP evaluation module 
-    -c, --configure                Configure the MMWCAS-RF-EVM board 
-    -r, --record                   Trigger data recording. This assumes that configuration is completed. 
-    -t, --time                     Indicate how long the recording should last in minutes. Default: 1 min 
-    -f, --cfg                      TOML Configuration file. Overwrite the default config when provided 
-    -h, --help                     Print CLI option help and exit. 
-    -v, --version                  Print program version and exit.
+Arguments:
+    configure                      Configure the MMWCAS-RF-EVM board
+    record                         Trigger data recording. This assumes that configuration is completed.
+      -d,  --capture-dir           Name of the director where to store recordings on the DSP board
+      -p,  --port                  Port number the DSP board server app is listening on
+      -i,  --ip                    IP Address of the MMWCAS DSP evaluation module
+      -t,  --time                  Indicate how long the recording should last in minutes. Default: 1 min
+      -f,  --cfg                   TOML Configuration file. Overwrite the default config when provided
+      -h,  --help                  Print CLI option help and exit.
+      -v,  --version               Print program version and exit
 ```
 
 A default configuration is already implemented (as described below) and can be used.
@@ -63,7 +63,7 @@ A default configuration is already implemented (as described below) and can be u
 ```
 
 If the DSP board has been reconfigured with another IP address, you can provide the new
-IP address in argument with the `--ip-addr` CLI option.
+IP address in argument with the `--ip` CLI option.
 
 ## Recording data
 
@@ -72,10 +72,12 @@ IP address in argument with the `--ip-addr` CLI option.
 To record data, the typical command is:
 
 ```bash
-mmwave -d <directory> --configure --record --time <duriation-in-minute>
+mmwave configure
+mmwave record -d <directory> --time <duriation-in-minute>
 
 # Exmaple
-mmwave -d outdoor0 --configure --record --time 10
+mmwave configure
+mmwave record -d outdoor0 --time 10
 ```
 
 With this command, the radar chips are configured with the default configuration
@@ -114,22 +116,24 @@ dataFmt:
 ```
 
 If the capture directory is not indicated (with the `-d` option), the capture folder is
-automatically created as `MMW_Capture_<timestamp>`; with `<timesamp>` is placeholder for
+automatically created as `MMW_Capture_<timestamp>`; with `<timesamp>` a placeholder for
 the Unix timestamp at which the command has been issued.
 
 ### Self-defined configuration
 
 It's possible to define custom configurations suitable for a given recording setup
-with TOML config files. Some examples of config files are present on the `config`
+with TOML config files. Some examples of config files are present in the `config`
 folder of this repository.
 
 With a config file, one can use the command below:
 
 ```bash
-mmwave -f <path-to-config-file> --configure --record --time <duration-in-min>
+mmwave configure -f <path-to-config-file>
+mmwave record --time <duration-in-min>
 
 # Example
-mmwave -f config/short-range-cfg.toml --configure --record --time 2
+mmwave configure -f config/short-range-cfg.toml
+mmwave record --time 2
 ```
 
 ### Check and copy recorded data
@@ -206,20 +210,23 @@ The structure of the repository is as follows:
 ```
 
 The content of the folders `ti/mmwavelink` and `ti/firmware` must not be modified. Those
-are respectively libraries and firmware provided by Texas Instruments and should not be
-modified unless one knows what it's all about. Any update to those can be directly obtained
-from TI or by copying them from the installation folder of `mmwave studio` and
-`mmwave dfp`.
+are respectively libraries and firmware provided by Texas Instruments and should ideally not be
+modified. Any update to those can be directly obtained from TI or by copying them from the installation
+folder of `mmwave studio` and `mmwave dfp`.
 
 The folders `ti/ethernet` and `ti/mmwave` are based on examples source files provided by
-TI. Since the original sources were only compatible with windows, these have been modified
+TI. Since the original sources were only compatible with Windows OS, these have been modified
 to operate on Linux OS. One can update these modules to extend the capabilities of this driver.
 
 - The folder `opt` holds the source handling the CLI option parsing
 - The `toml` folder handles the parsing of configuration files.
 - The entry point of the program is in the `mimo.c` file.
 
-**NOTE**: the files `toml/toml.c` and `toml/toml.h` have been authored by 
+**NOTE**:
+
+* The files `toml/toml.c` and `toml/toml.h` have been authored by
 [cktan](https://github.com/cktan) and released with an MIT license on Github at
 https://github.com/cktan/tomlc99. Therefore, this reference is the perfect place to
-seek for new updates of the `TOML` parser library.
+seek new updates to the `TOML` parser library.
+
+* See [opt](https://github.com/azinke/opt) for updates of the CLI parser

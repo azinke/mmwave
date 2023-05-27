@@ -295,7 +295,7 @@ int MMWL_DevicePowerUp(unsigned char deviceMap, uint32_t rlClientCbsTimeout, uin
 int MMWL_powerOnMaster(unsigned char deviceMap, uint32_t rlClientCbsTimeout);
 
 /** Connect to ethernet and init TDA */
-int MMWL_TDAInit(unsigned char *ipAddr, unsigned int port, uint8_t deviceMap);
+int MMWL_TDAInit(unsigned char *ipAddr, unsigned int port);
 
 /** Setup the TDA for recording */
 int MMWL_ArmingTDA(rlTdaArmCfg_t tdaArmCfgArgs);

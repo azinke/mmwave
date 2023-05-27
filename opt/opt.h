@@ -87,6 +87,14 @@ typedef struct cli_option {
   cli_option_action_t action;
 
   /**
+   * @brief Indicates if an argument is required
+   *
+   * Its default value would be '0'. When set to one,
+   * the CLI parser should make sure that the argument is provided.
+   */
+  unsigned char required;
+
+  /**
    * @brief Callbacl function to call when the argument is received
    * 
    */

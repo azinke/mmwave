@@ -2460,7 +2460,7 @@ int MMWL_DeArmingTDA() {
 /**
  * @brief 
  * 
- * @param deviceMap 
+ * @param deviceMap All cascaded device map
  * @return int 
  */
 int MMWL_DeviceDeInit(unsigned int deviceMap) {
@@ -2484,14 +2484,40 @@ int MMWL_DeviceDeInit(unsigned int deviceMap) {
 
 
 /**
+ * @brief Configure the devices to enable and their pheripherals
+ *
+ * @param deviceMap All cascaded device map
+ * @return int
+ */
+int MMWL_ConfigureDeviveMap(unsigned char deviceMap) {
+  uint32_t status = RL_RET_CODE_OK;
+
+  //Send the devices to be enabled for configuration and capture
+  status = ConfigureDeviceMap(deviceMap);
+  if (status != SYSTEM_LINK_STATUS_SOK) {
+    DEBUG_PRINT("# ERROR: Configure DeviceMap command failed\n");
+    return SYSTEM_LINK_STATUS_EFAIL;
+  }
+
+  msleep(20);
+  status = ConfigurePeripherals();
+  if (status != SYSTEM_LINK_STATUS_SOK) {
+    DEBUG_PRINT("# ERROR: Configure Peripherals command failed\n");
+    return SYSTEM_LINK_STATUS_EFAIL;
+  }
+  return status;
+}
+
+
+
+/**
  * @brief Connect to ethernet and init TDA board
  * 
  * @param ipAddr IP Address of the TDA board (default: 192.168.33.30)
  * @param port Port number to communication with the TDA (default: 5001)
- * @param deviceMap All cascaded device map
  * @return int Initialization status
  */
-int MMWL_TDAInit(unsigned char *ipAddr, unsigned int port, uint8_t deviceMap) {
+int MMWL_TDAInit(unsigned char *ipAddr, unsigned int port) {
   int retVal = RL_RET_CODE_OK;
   int timeOutCnt = 0;
 
@@ -2510,7 +2536,7 @@ int MMWL_TDAInit(unsigned char *ipAddr, unsigned int port, uint8_t deviceMap) {
 
   mmwl_bTDA_CaptureCardConnect = 0U;
   /* Connect to the TDA Capture card */
-  retVal = ethernetConnect(ipAddr, port, deviceMap);
+  retVal = ethernetConnect(ipAddr, port);
   if (retVal != RL_RET_CODE_OK) {
     DEBUG_PRINT(
       "ERROR: Connecting to TDA failed with error %d. Check whether the capture card is connected to the network! \n\n",
@@ -2537,6 +2563,23 @@ int MMWL_TDAInit(unsigned char *ipAddr, unsigned int port, uint8_t deviceMap) {
     DEBUG_PRINT("INFO: Connection to TDA successful! \n\n");
   }
 
+  return retVal;
+}
+
+
+/**
+ * @brief Teardown trace logs and close ethernet connection
+ *
+ * @return int
+ */
+int MMWL_TDADeInit() {
+  int retVal = RL_RET_CODE_OK;
+  /* Disconnect from the TDA Capture card */
+  retVal = ethernetDisconnect();
+  if (retVal != RL_RET_CODE_OK) {
+    DEBUG_PRINT("ERROR: Failed to disconnect from TDA Board with error %d \n\n", retVal);
+    return -1;
+  }
   return retVal;
 }
 
