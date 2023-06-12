@@ -2491,6 +2491,7 @@ int MMWL_DeviceDeInit(unsigned int deviceMap) {
  */
 int MMWL_ConfigureDeviveMap(unsigned char deviceMap) {
   uint32_t status = RL_RET_CODE_OK;
+  mmwl_bTDA_CaptureCardConnect = 0U;
 
   //Send the devices to be enabled for configuration and capture
   status = ConfigureDeviceMap(deviceMap);
@@ -2505,6 +2506,22 @@ int MMWL_ConfigureDeviveMap(unsigned char deviceMap) {
     DEBUG_PRINT("# ERROR: Configure Peripherals command failed\n");
     return SYSTEM_LINK_STATUS_EFAIL;
   }
+
+  while (1) {
+    if (mmwl_bTDA_CaptureCardConnect == 0U) {
+      msleep(1); /*Sleep 1 msec*/
+      timeOutCnt++;
+      if (timeOutCnt > MMWL_API_TDA_TIMEOUT) {
+        DEBUG_PRINT("ERROR: No Acknowlegment received from the capture card! \n\n");
+        retVal = RL_RET_CODE_RESP_TIMEOUT;
+        return retVal;
+      }
+    }
+    else {
+      break;
+    }
+  }
+
   return status;
 }
 
@@ -2534,7 +2551,6 @@ int MMWL_TDAInit(unsigned char *ipAddr, unsigned int port) {
     DEBUG_PRINT("INFO: Registered Async event handler with TDA \n\n");
   }
 
-  mmwl_bTDA_CaptureCardConnect = 0U;
   /* Connect to the TDA Capture card */
   retVal = ethernetConnect(ipAddr, port);
   if (retVal != RL_RET_CODE_OK) {
@@ -2543,23 +2559,7 @@ int MMWL_TDAInit(unsigned char *ipAddr, unsigned int port) {
       retVal
     );
     return -1;
-  }
-  while (1) {
-    if (mmwl_bTDA_CaptureCardConnect == 0U) {
-      msleep(1); /*Sleep 1 msec*/
-      timeOutCnt++;
-      if (timeOutCnt > MMWL_API_TDA_TIMEOUT) {
-        DEBUG_PRINT("ERROR: No Acknowlegment received from the capture card! \n\n");
-        retVal = RL_RET_CODE_RESP_TIMEOUT;
-        return retVal;
-      }
-    }
-    else {
-      break;
-    }
-  }
-
-  if (retVal == RL_RET_CODE_OK) {
+  } else {
     DEBUG_PRINT("INFO: Connection to TDA successful! \n\n");
   }
 
