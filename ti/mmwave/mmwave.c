@@ -1477,6 +1477,9 @@ int MMWL_chirpConfig(unsigned char deviceMap, rlChirpCfg_t chirpCfgArgs) {
 *
 *   @brief Frame configuration API.
 *
+*   Compute the TDA application width and height. This function must be called
+*   before calling `MMWL_ArmingTDA`.
+*
 *   @param[in] deviceMap - Devic Index
 *   @param[in] frameCfgArgs - Frame config
 *   @param[in] rfChanCfgArgs - Channel config
@@ -2163,24 +2166,6 @@ int MMWL_ArmingTDA(rlTdaArmCfg_t tdaArmCfgArgs) {
   int retVal = RL_RET_CODE_OK;
   int timeOutCnt = 0U;
 
-  /* Set width and height for all devices*/
-	/* Master */
-  /*
-	retVal = setWidthAndHeight(1, mmwl_TDA_width[0], mmwl_TDA_height[0]);
-	if (retVal != RL_RET_CODE_OK) {
-		DEBUG_PRINT(
-      "ERROR: Device map 1 : Setting width = %u and height = %u failed with error code %d \n\n",
-      mmwl_TDA_width[0], mmwl_TDA_height[0], retVal
-    );
-		return -1;
-	}
-	else {
-		DEBUG_PRINT(
-      "INFO: Device map 1 : Setting width = %u and height = %u successful\n\n",
-      mmwl_TDA_width[0], mmwl_TDA_height[0]
-    );
-	}
-  */
 	for (int i = 0; i < 4; i++) {
     retVal = setWidthAndHeight(1 << i, mmwl_TDA_width[i], mmwl_TDA_height[i]);
     if (retVal != RL_RET_CODE_OK) {
@@ -2197,8 +2182,6 @@ int MMWL_ArmingTDA(rlTdaArmCfg_t tdaArmCfgArgs) {
       );
     }
 	}
-
-
 
   mmwl_bTDA_FramePeriodicityACK = 0U;
   /* Send frame periodicity for syncing the data being received at VIP ports */
@@ -2460,7 +2443,7 @@ int MMWL_DeArmingTDA() {
 /**
  * @brief 
  * 
- * @param deviceMap 
+ * @param deviceMap All cascaded device map
  * @return int 
  */
 int MMWL_DeviceDeInit(unsigned int deviceMap) {
@@ -2484,14 +2467,57 @@ int MMWL_DeviceDeInit(unsigned int deviceMap) {
 
 
 /**
+ * @brief Configure the devices to enable and their pheripherals
+ *
+ * @param deviceMap All cascaded device map
+ * @return int
+ */
+int MMWL_ConfigureDeviveMap(unsigned char deviceMap) {
+  uint32_t status = RL_RET_CODE_OK;
+  uint32_t timeOutCnt = 0;
+  mmwl_bTDA_CaptureCardConnect = 0U;
+
+  //Send the devices to be enabled for configuration and capture
+  status = ConfigureDeviceMap(deviceMap);
+  if (status != SYSTEM_LINK_STATUS_SOK) {
+    DEBUG_PRINT("# ERROR: Configure DeviceMap command failed\n");
+    return SYSTEM_LINK_STATUS_EFAIL;
+  }
+
+  msleep(20);
+  status = ConfigurePeripherals();
+  if (status != SYSTEM_LINK_STATUS_SOK) {
+    DEBUG_PRINT("# ERROR: Configure Peripherals command failed\n");
+    return SYSTEM_LINK_STATUS_EFAIL;
+  }
+
+  while (1) {
+    if (mmwl_bTDA_CaptureCardConnect == 0U) {
+      msleep(1); /*Sleep 1 msec*/
+      timeOutCnt++;
+      if (timeOutCnt > MMWL_API_TDA_TIMEOUT) {
+        DEBUG_PRINT("ERROR: No Acknowlegment received from the capture card! \n\n");
+        status = RL_RET_CODE_RESP_TIMEOUT;
+        return status;
+      }
+    }
+    else {
+      break;
+    }
+  }
+
+  return status;
+}
+
+
+/**
  * @brief Connect to ethernet and init TDA board
  * 
  * @param ipAddr IP Address of the TDA board (default: 192.168.33.30)
  * @param port Port number to communication with the TDA (default: 5001)
- * @param deviceMap All cascaded device map
  * @return int Initialization status
  */
-int MMWL_TDAInit(unsigned char *ipAddr, unsigned int port, uint8_t deviceMap) {
+int MMWL_TDAInit(unsigned char *ipAddr, unsigned int port) {
   int retVal = RL_RET_CODE_OK;
   int timeOutCnt = 0;
 
@@ -2508,35 +2534,35 @@ int MMWL_TDAInit(unsigned char *ipAddr, unsigned int port, uint8_t deviceMap) {
     DEBUG_PRINT("INFO: Registered Async event handler with TDA \n\n");
   }
 
-  mmwl_bTDA_CaptureCardConnect = 0U;
   /* Connect to the TDA Capture card */
-  retVal = ethernetConnect(ipAddr, port, deviceMap);
+  retVal = ethernetConnect(ipAddr, port);
   if (retVal != RL_RET_CODE_OK) {
     DEBUG_PRINT(
       "ERROR: Connecting to TDA failed with error %d. Check whether the capture card is connected to the network! \n\n",
       retVal
     );
     return -1;
-  }
-  while (1) {
-    if (mmwl_bTDA_CaptureCardConnect == 0U) {
-      msleep(1); /*Sleep 1 msec*/
-      timeOutCnt++;
-      if (timeOutCnt > MMWL_API_TDA_TIMEOUT) {
-        DEBUG_PRINT("ERROR: No Acknowlegment received from the capture card! \n\n");
-        retVal = RL_RET_CODE_RESP_TIMEOUT;
-        return retVal;
-      }
-    }
-    else {
-      break;
-    }
-  }
-
-  if (retVal == RL_RET_CODE_OK) {
+  } else {
     DEBUG_PRINT("INFO: Connection to TDA successful! \n\n");
   }
 
+  return retVal;
+}
+
+
+/**
+ * @brief Teardown trace logs and close ethernet connection
+ *
+ * @return int
+ */
+int MMWL_TDADeInit() {
+  int retVal = RL_RET_CODE_OK;
+  /* Disconnect from the TDA Capture card */
+  retVal = ethernetDisconnect();
+  if (retVal != RL_RET_CODE_OK) {
+    DEBUG_PRINT("ERROR: Failed to disconnect from TDA Board with error %d \n\n", retVal);
+    return -1;
+  }
   return retVal;
 }
 

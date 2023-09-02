@@ -247,7 +247,17 @@ void check(int status, const char *success_msg, const char *error_msg,
   }
 }
 
-
+/**
+ * @brief Initialize the master RADAR chip of the MMWCAS-RF-EVM board
+ *
+ * The configuration defines the number of channels to enbaled and the
+ * output format of the RADAR chips' ADC module. The patch firmware is also
+ * uploaded to the chip
+ *
+ * @param channelCfg Channel configuration
+ * @param adcOutCfg ADC configs
+ * @return int32_t Configuration status
+ */
 int32_t initMaster(rlChanCfg_t channelCfg, rlAdcOutCfg_t adcOutCfg) {
   const unsigned int masterId = 0;
   const unsigned int masterMap = 1 << masterId;
@@ -293,6 +303,17 @@ int32_t initMaster(rlChanCfg_t channelCfg, rlAdcOutCfg_t adcOutCfg) {
 }
 
 
+/**
+ * @brief Initialize the Slave RADAR chips of the MMWCAS-RF-EVM board
+ *
+ * The configuration defines the number of channels to enbaled and the
+ * output format of the RADAR chips' ADC module. The patch firmware is also
+ * uploaded to the chips
+ *
+ * @param channelCfg Channel configuration
+ * @param adcOutCfg ADC configs
+ * @return int32_t Configuration status
+ */
 int32_t initSlaves(rlChanCfg_t channelCfg, rlAdcOutCfg_t adcOutCfg) {
   int status = 0;
   uint8_t slavesMap = (1 << 1) | (1 << 2) | (1 << 3);
@@ -342,6 +363,12 @@ int32_t initSlaves(rlChanCfg_t channelCfg, rlAdcOutCfg_t adcOutCfg) {
 }
 
 
+/**
+ * @brief Handle the global configuration of the MMWCAS board
+ *
+ * @param config Device configuration
+ * @return uint32_t Configuration status
+ */
 uint32_t configure (devConfig_t config) {
   int status = 0;
   status += initMaster(config.channelCfg, config.adcOutCfg);
@@ -394,32 +421,6 @@ uint32_t configure (devConfig_t config) {
     "[ALL] Chirp configuration successful!",
     "[ALL] Chirp configuration failed!", config.deviceMap, TRUE);
 
-  // Master frame config.
-  status += MMWL_frameConfig(
-    config.masterMap,
-    config.frameCfg,
-    config.channelCfg,
-    config.adcOutCfg,
-    config.datapathCfg,
-    config.profileCfg
-  );
-  check(status,
-    "[MASTER] Frame configuration completed!",
-    "[MASTER] Frame configuration failed!", config.masterMap, TRUE);
-
-  // Slaves frame config
-  status += MMWL_frameConfig(
-    config.slavesMap,
-    config.frameCfg,
-    config.channelCfg,
-    config.adcOutCfg,
-    config.datapathCfg,
-    config.profileCfg
-  );
-  check(status,
-    "[SLAVE] Frame configuration completed!",
-    "[SLAVE] Frame configuration failed!", config.slavesMap, TRUE);
-
   check(status,
     "[MIMO] Configuration completed!\n",
     "[MIMO] Configuration completed with error!", config.deviceMap, TRUE);
@@ -445,7 +446,7 @@ parser_t *g_parser = NULL;
  * Print program version
  */
 void print_version() {
-  printf(PROG_NAME " version " PROG_VERSION ", " PROG_COPYRIGHT "\n");
+  printf(PROG_NAME " " PROG_VERSION ", " PROG_COPYRIGHT "\n");
   exit(0);
 }
 
@@ -491,16 +492,31 @@ int main (int argc, char *argv[]) {
   unsigned char default_capture_directory[64];
   sprintf(default_capture_directory, "%s_%lu", "MMWL_Capture", (unsigned long int)time(NULL));
   int status = 0;
+  // unsigned char vdefault = 0;
   float default_recording_duration = 1.0;   // min
 
   parser_t parser = init_parser(
     PROG_NAME,
-    "Configuration and control tool for TI MMWave cascade Evaluation Module"
+    "Configuration and control tool for TI MMWave Evaluation Modules"
   );
   g_parser = &parser;
 
   atexit(cleanup);  // Call the cleanup function before exiting the program
   signal(SIGINT, signal_handler);  // Catch CTRL+C to enable memory deallocation
+
+  option_t opt_config = {
+    .args = "configure",
+    .help = "Configure the MMWCAS-RF-EVM board",
+    .type = OPT_BOOL,
+  };
+  add_arg(&parser, &opt_config);
+
+  option_t opt_record = {
+    .args = "record",
+    .help = "Trigger data recording. This assumes that configuration is completed.",
+    .type = OPT_BOOL,
+  };
+  add_arg(&parser, &opt_record);
 
   option_t opt_capturedir = {
     .args = "-d",
@@ -522,28 +538,12 @@ int main (int argc, char *argv[]) {
 
   option_t opt_ipaddr = {
     .args = "-i",
-    .argl = "--ip-addr",
+    .argl = "--ip",
     .help = "IP Address of the MMWCAS DSP evaluation module",
     .type = OPT_STR,
     .default_value = default_ip_addr,
   };
   add_arg(&parser, &opt_ipaddr);
-
-  option_t opt_config = {
-    .args = "-c",
-    .argl = "--configure",
-    .help = "Configure the MMWCAS-RF-EVM board",
-    .type = OPT_BOOL,
-  };
-  add_arg(&parser, &opt_config);
-
-  option_t opt_record = {
-    .args = "-r",
-    .argl = "--record",
-    .help = "Trigger data recording. This assumes that configuration is completed.",
-    .type = OPT_BOOL,
-  };
-  add_arg(&parser, &opt_record);
 
   option_t opt_record_duration = {
     .args = "-t",
@@ -590,9 +590,9 @@ int main (int argc, char *argv[]) {
     exit(0);
   }
 
-  unsigned char *ip_addr = (unsigned char*)get_option(&parser, "ip-addr");
-  unsigned int port = *(unsigned int*)get_option(&parser, "port");
-  unsigned char *capture_directory = (unsigned char*)get_option(&parser, "capture-dir");
+  unsigned char *ip_addr = (unsigned char*)get_option(&parser, "--ip");
+  unsigned int port = *(unsigned int*)get_option(&parser, "--port");
+  unsigned char *capture_directory = (unsigned char*)get_option(&parser, "--capture-dir");
   strcat(capture_path, capture_directory);
   /* Record CLI option possible values are:
    *  - start: To start a recording and exit
@@ -600,10 +600,10 @@ int main (int argc, char *argv[]) {
    *  - oneshot: Start a recording, wait for it's complemention and stop it.
    */
   unsigned char *record = (unsigned char*)get_option(&parser, "record");
-  float record_duration = *(float*)get_option(&parser, "time");
+  float record_duration = *(float*)get_option(&parser, "--time");
   record_duration *= 60 * 1000;  // convert into milliseconds
 
-  unsigned char *config_filename = (unsigned char*)get_option(&parser, "cfg");
+  unsigned char *config_filename = (unsigned char*)get_option(&parser, "--cfg");
 
   // Configuration
   devConfig_t config;
@@ -651,19 +651,58 @@ int main (int argc, char *argv[]) {
     .dataPacking = 0, // 0: 16-bit | 1: 12-bit
   };
 
-  if ((unsigned char *)get_option(&parser, "configure") != NULL) {
-    // Connect to TDA
-    status = MMWL_TDAInit(ip_addr, port, config.deviceMap);
-    check(status,
+  // Connect to TDA
+  status = MMWL_TDAInit(ip_addr, port);
+  check(status,
       "[MMWCAS-DSP] TDA Connected!",
       "[MMWCAS-DSP] Couldn't connect to TDA board!\n", 32, TRUE);
 
+  if ((unsigned char *)get_option(&parser, "configure") != NULL) {
+    // Configure Device Map and Initialize TDA peripherals
+    status = MMWL_ConfigureDeviveMap(config.deviceMap);
+    check(status,
+      "[MMWCAS-DSP] TDA Initialized!",
+      "[MMWCAS-DSP] Couldn't initialize the TDA board!\n", config.deviceMap, TRUE);
+
     // Start configuration
     configure(config);
-    msleep(2000);
+    msleep(1000);
   }
 
-  if ((unsigned char *)get_option(&parser, "record") != NULL) {
+  else if ((unsigned char *)get_option(&parser, "record") != NULL) {
+    /**
+     * NOTE: Frame configurations define the application width and height that is
+     * needed to arm the TDA. Hence, these are done during the record command.
+     *
+     * When using a custom configuration file, it should also be provided in parameter
+     * when recording.
+     */
+    // Master frame config.
+    status += MMWL_frameConfig(
+      config.masterMap,
+      config.frameCfg,
+      config.channelCfg,
+      config.adcOutCfg,
+      config.datapathCfg,
+      config.profileCfg
+    );
+    check(status,
+      "[MASTER] Frame configuration completed!",
+      "[MASTER] Frame configuration failed!", config.masterMap, TRUE);
+
+    // Slaves frame config
+    status += MMWL_frameConfig(
+      config.slavesMap,
+      config.frameCfg,
+      config.channelCfg,
+      config.adcOutCfg,
+      config.datapathCfg,
+      config.profileCfg
+    );
+    check(status,
+      "[SLAVE] Frame configuration completed!",
+      "[SLAVE] Frame configuration failed!", config.slavesMap, TRUE);
+
     // Arm TDA
     status = MMWL_ArmingTDA(tdaCfg);
     check(status,
@@ -693,5 +732,11 @@ int main (int argc, char *argv[]) {
       "[MMWCAS-RF] Failed to de-arm TDA board!\n", 32, TRUE);
     msleep(1000);
   }
+
+  // Disconnect from TDA
+  status = MMWL_TDADeInit();
+  check(status,
+      "[MMWCAS-DSP] TDA successfully disconnected!",
+      "[MMWCAS-DSP] Couldn't disconnect from TDA board!\n", 32, TRUE);
   return 0;
 }
