@@ -421,32 +421,6 @@ uint32_t configure (devConfig_t config) {
     "[ALL] Chirp configuration successful!",
     "[ALL] Chirp configuration failed!", config.deviceMap, TRUE);
 
-  // Master frame config.
-  status += MMWL_frameConfig(
-    config.masterMap,
-    config.frameCfg,
-    config.channelCfg,
-    config.adcOutCfg,
-    config.datapathCfg,
-    config.profileCfg
-  );
-  check(status,
-    "[MASTER] Frame configuration completed!",
-    "[MASTER] Frame configuration failed!", config.masterMap, TRUE);
-
-  // Slaves frame config
-  status += MMWL_frameConfig(
-    config.slavesMap,
-    config.frameCfg,
-    config.channelCfg,
-    config.adcOutCfg,
-    config.datapathCfg,
-    config.profileCfg
-  );
-  check(status,
-    "[SLAVE] Frame configuration completed!",
-    "[SLAVE] Frame configuration failed!", config.slavesMap, TRUE);
-
   check(status,
     "[MIMO] Configuration completed!\n",
     "[MIMO] Configuration completed with error!", config.deviceMap, TRUE);
@@ -684,7 +658,7 @@ int main (int argc, char *argv[]) {
       "[MMWCAS-DSP] Couldn't connect to TDA board!\n", 32, TRUE);
 
   if ((unsigned char *)get_option(&parser, "configure") != NULL) {
-    // Configure TDA board
+    // Configure Device Map and Initialize TDA peripherals
     status = MMWL_ConfigureDeviveMap(config.deviceMap);
     check(status,
       "[MMWCAS-DSP] TDA Initialized!",
@@ -696,6 +670,39 @@ int main (int argc, char *argv[]) {
   }
 
   else if ((unsigned char *)get_option(&parser, "record") != NULL) {
+    /**
+     * NOTE: Frame configurations define the application width and height that is
+     * needed to arm the TDA. Hence, these are done during the record command.
+     *
+     * When using a custom configuration file, it should also be provided in parameter
+     * when recording.
+     */
+    // Master frame config.
+    status += MMWL_frameConfig(
+      config.masterMap,
+      config.frameCfg,
+      config.channelCfg,
+      config.adcOutCfg,
+      config.datapathCfg,
+      config.profileCfg
+    );
+    check(status,
+      "[MASTER] Frame configuration completed!",
+      "[MASTER] Frame configuration failed!", config.masterMap, TRUE);
+
+    // Slaves frame config
+    status += MMWL_frameConfig(
+      config.slavesMap,
+      config.frameCfg,
+      config.channelCfg,
+      config.adcOutCfg,
+      config.datapathCfg,
+      config.profileCfg
+    );
+    check(status,
+      "[SLAVE] Frame configuration completed!",
+      "[SLAVE] Frame configuration failed!", config.slavesMap, TRUE);
+
     // Arm TDA
     status = MMWL_ArmingTDA(tdaCfg);
     check(status,

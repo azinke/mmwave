@@ -125,15 +125,15 @@ It's possible to define custom configurations suitable for a given recording set
 with TOML config files. Some examples of config files are present in the `config`
 folder of this repository.
 
-With a config file, one can use the command below:
+With a config file, one can use the commands below:
 
 ```bash
 mmwave configure -f <path-to-config-file>
-mmwave record --time <duration-in-min>
+mmwave record -f <path-to-config-file> --time <duration-in-min>
 
 # Example
 mmwave configure -f config/short-range-cfg.toml
-mmwave record --time 2
+mmwave record -f config/short-range-cfg.toml --time 2
 ```
 
 ### Check and copy recorded data
@@ -215,7 +215,7 @@ modified. Any update to those can be directly obtained from TI or by copying the
 folder of `mmwave studio` and `mmwave dfp`.
 
 The folders `ti/ethernet` and `ti/mmwave` are based on examples source files provided by
-TI. Since the original sources were only compatible with Windows OS, these have been modified
+TI. Since the initial sources were only compatible with Windows OS, these have been modified
 to operate on Linux OS. One can update these modules to extend the capabilities of this driver.
 
 - The folder `opt` holds the source handling the CLI option parsing
