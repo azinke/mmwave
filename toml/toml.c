@@ -2159,7 +2159,7 @@ int toml_rtod_ex(toml_raw_t src, double *ret_, char *buf, int buflen) {
   /* decimal point, if used, must be surrounded by at least one digit on each
    * side */
   {
-    char *dot = strchr(s, '.');
+    const char *dot = (const char*)strchr(s, '.');
     if (dot) {
       if (dot == s || !isdigit(dot[-1]) || !isdigit(dot[1]))
         return -1;
