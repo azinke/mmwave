@@ -231,7 +231,7 @@ void check(int status, const char *success_msg, const char *error_msg,
   if (status == RL_RET_CODE_OK) {
 #if DEV_ENV
     printf(CGREEN);
-    printf(success_msg);
+    printf("%s", success_msg);
     printf(CRESET);
     printf("\n");
 #endif
@@ -239,7 +239,7 @@ void check(int status, const char *success_msg, const char *error_msg,
   } else {
 #if DEV_ENV
     printf(CRED);
-    printf(error_msg);
+    printf("%s", error_msg);
     printf(CRESET);
     printf("\n");
 #endif
