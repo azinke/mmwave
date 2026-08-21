@@ -2,6 +2,12 @@
 CC = gcc
 CFLAGS = -c
 
+# Installation
+PREFIX ?= /usr/local
+BINDIR ?= $(PREFIX)/bin
+DESTDIR ?=
+INSTALL ?= install
+
 ODIR = output
 
 # Root directory
@@ -38,10 +44,12 @@ all: mmwlink mmwethernet mmwave cliopt tomlconfig
 
 build: all
 
-install: all
-	@sudo cp -f ./mmwave /usr/bin
-	@rm -f ./mmwave
+install: build
+	@$(INSTALL) -d "$(DESTDIR)$(BINDIR)"
+	@$(INSTALL) -m 0755 mmwave "$(DESTDIR)$(BINDIR)/mmwave"
 
 clean:
 	@rm -f *.o
 	@rm -f mmwave
+
+.PHONY: all build install clean

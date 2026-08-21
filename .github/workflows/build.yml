@@ -1,0 +1,75 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Linux ${{ matrix.arch }}
+    runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            cc: gcc
+            package: gcc
+          - arch: arm64
+            cc: aarch64-linux-gnu-gcc
+            package: gcc-aarch64-linux-gnu
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes "${{ matrix.package }}"
+
+      - name: Build and stage binary
+        run: make install CC="${{ matrix.cc }}" BINDIR="$PWD/dist"
+
+      - name: Package binary
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          mv dist/mmwave "dist/mmwave-linux-${ARCH}"
+          tar -C dist -czf "dist/mmwave-linux-${ARCH}.tar.gz" "mmwave-linux-${ARCH}"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: mmwave-linux-${{ matrix.arch }}
+          path: |
+            dist/mmwave-linux-${{ matrix.arch }}
+            dist/mmwave-linux-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Publish release binaries
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Attach binaries to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" dist/* --clobber

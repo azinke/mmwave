@@ -22,9 +22,27 @@ All the third-party libraries needed are already present in the repository.
 `mmwave` can then be installed as follows:
 
 ```bash
-    git clone <mmwave-repository-git-url>
-    cd mmwave
-    sudo make install # Build and install mmwave on the machine
+git clone <mmwave-repository-git-url>
+cd mmwave
+sudo make install # Builds and installs mmwave to /usr/local/bin
+```
+
+The installation prefix can be changed without requiring root access:
+
+```bash
+make install PREFIX="$PWD/install"
+```
+
+This installs the binary to `./install/bin/mmwave`. `BINDIR` can override the binary
+directory directly, while `DESTDIR` is available for staged packaging.
+
+### Prebuilt binaries
+
+Each GitHub release provides Linux binaries for x86_64 and arm64. Download the archive
+matching your system, extract it, and run the binary directly. For example:
+
+```bash
+tar -xzf mmwave-linux-x86_64.tar.gz
 ```
 
 ## Usage
