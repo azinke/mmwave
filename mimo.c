@@ -69,6 +69,137 @@ rlChirpCfg_t chirpCfgArgs = {
   .freqSlopeVar = 0,
 };
 
+/**static beamforming */
+rlRfPhaseShiftCfg_t beamCfgArgs = {
+.chirpStartIdx = 0,
+.chirpEndIdx = 31,
+.tx0PhaseShift = 0,
+.tx1PhaseShift = 4,
+.tx2PhaseShift = 8,
+};
+
+/** Dynamic beamforming: 16 chirps */
+rlDynPerChirpPhShftCfg_t dynBeamCfgArgs = {
+    .reserved = 0,
+    .chirpSegSel = 0,
+
+    .phShiftPerTx = {
+        /* Chirp 0 */
+        {
+            .chirpNTx0PhaseShifter = 0,
+            .chirpNTx1PhaseShifter = 4,
+            .chirpNTx2PhaseShifter = 8
+        },
+
+        /* Chirp 1 */
+        {
+            .chirpNTx0PhaseShifter = 0,
+            .chirpNTx1PhaseShifter = 5,
+            .chirpNTx2PhaseShifter = 10
+        },
+
+        /* Chirp 2 */
+        {
+            .chirpNTx0PhaseShifter = 0,
+            .chirpNTx1PhaseShifter = 6,
+            .chirpNTx2PhaseShifter = 12
+        },
+
+        /* Chirp 3 */
+        {
+            .chirpNTx0PhaseShifter = 0,
+            .chirpNTx1PhaseShifter = 7,
+            .chirpNTx2PhaseShifter = 14
+        },
+
+        /* Chirp 4 */
+        {
+            .chirpNTx0PhaseShifter = 0,
+            .chirpNTx1PhaseShifter = 8,
+            .chirpNTx2PhaseShifter = 16
+        },
+
+        /* Chirp 5 */
+        {
+            .chirpNTx0PhaseShifter = 0,
+            .chirpNTx1PhaseShifter = 9,
+            .chirpNTx2PhaseShifter = 18
+        },
+
+        /* Chirp 6 */
+        {
+            .chirpNTx0PhaseShifter = 0,
+            .chirpNTx1PhaseShifter = 10,
+            .chirpNTx2PhaseShifter = 20
+        },
+
+        /* Chirp 7 */
+        {
+            .chirpNTx0PhaseShifter = 0,
+            .chirpNTx1PhaseShifter = 11,
+            .chirpNTx2PhaseShifter = 22
+        },
+
+        /* Chirp 8 */
+        {
+            .chirpNTx0PhaseShifter = 0,
+            .chirpNTx1PhaseShifter = 12,
+            .chirpNTx2PhaseShifter = 24
+        },
+
+        /* Chirp 9 */
+        {
+            .chirpNTx0PhaseShifter = 0,
+            .chirpNTx1PhaseShifter = 13,
+            .chirpNTx2PhaseShifter = 26
+        },
+
+        /* Chirp 10 */
+        {
+            .chirpNTx0PhaseShifter = 0,
+            .chirpNTx1PhaseShifter = 14,
+            .chirpNTx2PhaseShifter = 28
+        },
+
+        /* Chirp 11 */
+        {
+            .chirpNTx0PhaseShifter = 0,
+            .chirpNTx1PhaseShifter = 15,
+            .chirpNTx2PhaseShifter = 30
+        },
+
+        /* Chirp 12 */
+        {
+            .chirpNTx0PhaseShifter = 0,
+            .chirpNTx1PhaseShifter = 16,
+            .chirpNTx2PhaseShifter = 32
+        },
+
+        /* Chirp 13 */
+        {
+            .chirpNTx0PhaseShifter = 0,
+            .chirpNTx1PhaseShifter = 17,
+            .chirpNTx2PhaseShifter = 34
+        },
+
+        /* Chirp 14 */
+        {
+            .chirpNTx0PhaseShifter = 0,
+            .chirpNTx1PhaseShifter = 18,
+            .chirpNTx2PhaseShifter = 36
+        },
+
+        /* Chirp 15 */
+        {
+            .chirpNTx0PhaseShifter = 0,
+            .chirpNTx1PhaseShifter = 19,
+            .chirpNTx2PhaseShifter = 38
+        }
+    },
+
+    .programMode = 1
+};
+
 /** Channel config */
 rlChanCfg_t channelCfgArgs = {
   .rxChannelEn = 0x0F,      // Enable all 4 RX Channels
@@ -157,6 +288,7 @@ rlDevCsi2Cfg_t csi2LaneCfgArgs = {
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
 */
 
+RadarMode beamforming = MIMO;
 
 /**
  * @brief Check if a value is in the table provided in argument
@@ -208,6 +340,81 @@ uint32_t configureMimoChirp(uint8_t devId, rlChirpCfg_t chirpCfg) {
   }
   return status;
 }
+
+uint32_t configureStaticBFChirp(uint8_t devId, rlChirpCfg_t chirpCfg, rlRfPhaseShiftCfg_t beamCfg)
+{
+    int status = 0;
+    
+    /* Enable TX0, TX1 and TX2 */
+    chirpCfg.txEnable = 0x07;
+    chirpCfg.chirpStartIdx = 0;
+    chirpCfg.chirpEndIdx = NUM_CHIRPS;
+    status = MMWL_chirpConfig(createDevMapFromDevId(devId),chirpCfg);
+
+    if (status != 0)
+    {
+        DEBUG_PRINT(
+            "[STATIC BF] Chirp configuration failed for dev %u, status: %d\n",
+            devId,
+            status
+        );
+
+        return status;
+    }
+
+    status = MMWL_phaseShiftConfig(createDevMapFromDevId(devId),beamCfg);
+
+    DEBUG_PRINT(
+        "[STATIC BF] Phase-shift configuration failed for dev %u, status: %d\n",
+        devId,
+        status
+    );
+
+    if (status != 0)
+    {
+        DEBUG_PRINT("Configuration of static BF failed!\n");
+        return status;
+    }
+  return status;
+}
+
+uint32_t configureDynBFChirp(uint8_t devId, rlChirpCfg_t chirpCfg, rlDynPerChirpPhShftCfg_t dynBeamCfg)
+{
+    int status = 0;
+    
+    /* Enable TX0, TX1 and TX2 */
+    chirpCfg.txEnable = 0x07;
+    chirpCfg.chirpStartIdx = 0;
+    chirpCfg.chirpEndIdx = NUM_CHIRPS;
+    status = MMWL_chirpConfig(createDevMapFromDevId(devId),chirpCfg);
+
+    if (status != 0)
+    {
+        DEBUG_PRINT(
+            "[DYNAMIC BF] Chirp configuration failed for dev %u, status: %d\n",
+            devId,
+            status
+        );
+
+        return status;
+    }
+
+    status = MMWL_dynamicPhaseShiftConfig(createDevMapFromDevId(devId),dynBeamCfg);
+
+    DEBUG_PRINT(
+        "[DYNAMIC BF] Phase-shift configuration failed for dev %u, status: %d\n",
+        devId,
+        status
+    );
+
+    if (status != 0)
+    {
+        DEBUG_PRINT("Configuration of dynamic BF failed!\n");
+        return status;
+    }
+  return status;
+}
+
 
 /**
  * @brief Check status and print error or success message
@@ -386,9 +593,24 @@ uint32_t configure (devConfig_t config) {
     "[ALL] Profile configuration successful!",
     "[ALL] Profile configuration failed!", config.deviceMap, TRUE);
 
-  // MIMO Chirp configuration
+  // RadarMode Chirp configuration
   for (uint8_t devId = 0; devId < 4; devId++) {
-    status += configureMimoChirp(devId, config.chirpCfg);
+
+    switch(beamforming)
+    {
+        case MIMO:
+            status += configureMimoChirp(devId, config.chirpCfg);
+            break;
+
+        case STATIC_BEAMFORMING:
+            status += configureStaticBFChirp(devId, config.chirpCfg, config.beamCfg);
+            break;
+
+        case DYNAMIC_BEAMFORMING:
+            status += configureDynBFChirp(devId, config.chirpCfg, config.dynBeamCfg);
+            break;
+    }
+        
   }
   check(status,
     "[ALL] Chirp configuration successful!",
@@ -591,8 +813,20 @@ int main (int argc, char *argv[]) {
   };
   add_arg(&parser, &opt_version);
 
+    option_t opt_beamforming = {
+    .args = "-b",
+    .argl = "--beamforming",
+    .help = "0=MIMO, 1=Static beamforming, 2=Dynamic beamforming",
+    .type = OPT_INT,
+  };
+  add_arg(&parser, &opt_beamforming);
+  
   parse(&parser, argc, argv);
 
+  if ((unsigned char *)get_option(&parser, "beamforming") != NULL) {
+    beamforming = *(int *)get_option(&parser, "beamforming");
+}
+  
   // Print help
   if ((unsigned char*)get_option(&parser, "help") != NULL) {
     print_help(&parser);
@@ -635,6 +869,12 @@ int main (int argc, char *argv[]) {
   config.lpmCfg = lpmCfgArgs;
   config.miscCfg = miscCfgArgs;
 
+if(beamforming == STATIC_BEAMFORMING)
+  config.beamCfg = beamCfgArgs;
+else
+if(beamforming == DYNAMIC_BEAMFORMING)
+ config.dynBeamCfg = dynBeamCfgArgs;
+  
   if (config_filename != NULL) {
     // Read parameters from config file
     read_config(config_filename, &config);

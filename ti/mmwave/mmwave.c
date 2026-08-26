@@ -1472,6 +1472,67 @@ int MMWL_chirpConfig(unsigned char deviceMap, rlChirpCfg_t chirpCfgArgs) {
   return retVal;
 }
 
+/**
+ * @fn int MMWL_phaseShiftConfig(unsigned char deviceMap,
+ *                                rlRfPhaseShiftCfg_t phaseShiftCfgArgs)
+ *
+ * used for static beamforming, 
+ *
+ * @param[in] deviceMap          - Device index/map
+ * @param[in] phaseShiftCfgArgs  - Static phase-shift configuration
+ *
+ * @return int Success - 0, Failure - Error Code
+ */
+int MMWL_phaseShiftConfig(unsigned char deviceMap, rlRfPhaseShiftCfg_t phaseShiftCfgArgs)
+{
+    int retVal = RL_RET_CODE_OK;
+
+    DEBUG_PRINT(
+        "Device map %u : Calling rlRfSetPhaseShiftConfig\n",
+        deviceMap
+    );
+
+    retVal = CALL_API(
+        API_TYPE_C | RF_SET_PHASE_SHIFT_CONFIG_IND,
+        deviceMap,
+        &phaseShiftCfgArgs,
+        1U
+    );
+
+    return retVal;
+}
+
+/**
+ * @fn int MMWL_dynamicPhaseShiftConfig(
+ *              unsigned char deviceMap,
+ *              rlDynPerChirpPhShftCfg_t dynPhaseShiftCfgArgs)
+ *
+ * @used for dynamic beamforming.. 
+ *
+ * @param[in] deviceMap              - Device index/map
+ * @param[in] dynPhaseShiftCfgArgs   - Dynamic per-chirp phase-shift configuration
+ *
+ * @return int Success - 0, Failure - Error Code
+ */
+int MMWL_dynamicPhaseShiftConfig( unsigned char deviceMap, rlDynPerChirpPhShftCfg_t dynPhaseShiftCfgArgs)
+{
+    int retVal = RL_RET_CODE_OK;
+
+    DEBUG_PRINT(
+        "Device map %u : Calling rlSetDynPerChirpPhShifterCfg\n",
+        deviceMap
+    );
+
+    retVal = CALL_API(
+        API_TYPE_C | SET_DYN_PER_PERCHIRP_PH_SHIFTER_CFG_IND,
+        deviceMap,
+        &dynPhaseShiftCfgArgs,
+        1U
+    );
+
+    return retVal;
+}
+
 
 /** @fn int MMWL_frameConfig(unsigned char deviceMap)
 *

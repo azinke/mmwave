@@ -83,6 +83,15 @@ A default configuration is already implemented (as described below) and can be u
 If the DSP board has been reconfigured with another IP address, you can provide the new
 IP address in argument with the `--ip-addr` CLI option.
 
+### Beamforming Configuration
+Set the beamforming option `-b` to either 1 or 2 to select `static` or `dynamic` beamforming, respectively.
+
+For dynamic beamforming, the phase-shift configuration typically requires a codebook or CSV file containing the desired beam-steering parameters.
+The specific format and implementation of the codebook are left to the user's discretion based on the application requirements.
+
+In mimo.c, `rlDynPerChirpPhShftCfg_t dynBeamCfgArgs` is provided as an example configuration for 16-chirp dynamic beamforming.
+
+
 ## Recording data
 
 ### Default config

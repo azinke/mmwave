@@ -236,6 +236,11 @@ int MMWL_frameConfig(
 /*Chirp configuration*/
 int MMWL_chirpConfig(unsigned char deviceMap, rlChirpCfg_t chirpCfgArgs);
 
+/** static beamforming  */
+int MMWL_phaseShiftConfig(unsigned char deviceMap, rlRfPhaseShiftCfg_t phaseShiftCfgArgs);
+
+/*  dynamic beamforming */
+int MMWL_dynamicPhaseShiftConfig(unsigned char deviceMap, rlDynPerChirpPhShftCfg_t dynPhaseShiftCfgArgs);
 /*Profile configuration*/
 int MMWL_profileConfig(unsigned char deviceMap, rlProfileCfg_t profileCfgArgs);
 

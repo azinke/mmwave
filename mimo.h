@@ -33,6 +33,12 @@
 #define CGREEN    "\e[0;32m"    // Terminal code for regular greed text
 #define CRESET    "\e[0m"       // Clear reset terminal color
 
+/** Device Mode*/
+typedef enum {
+    MIMO,
+    STATIC_BEAMFORMING,
+    DYNAMIC_BEAMFORMING
+} RadarMode;
 
 /** Device configuration */
 typedef struct devConfig {
@@ -84,6 +90,12 @@ typedef struct devConfig {
 
   // CSI2 config
   rlDevCsi2Cfg_t csi2LaneCfg;
+
+  // static beamforming config
+  rlRfPhaseShiftCfg_t beamCfg;
+
+  // dynamic beamforming config
+  rlDynPerChirpPhShftCfg_t dynBeamCfg;
 
 } devConfig_t;
 
