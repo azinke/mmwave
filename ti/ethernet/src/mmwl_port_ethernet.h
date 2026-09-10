@@ -667,14 +667,17 @@ STATUS Radar_processData(Radar_EthDataPacketPrms *pDataPacket_ptr,
 /********************** Capture Card Configuration API's *********************/
 
 EXPORT STATUS ethernetConnect(unsigned char *ipAddr,
-                              uint32_t configPort,
-                              uint32_t deviceMap);
+                              uint32_t configPort);
 
 EXPORT STATUS ethernetDisconnect();
 
 EXPORT STATUS IsConnected();
 
 EXPORT STATUS ConfigureDeviceMap(uint32_t deviceMap);
+
+EXPORT STATUS ConfigurePeripherals();
+
+EXPORT STATUS ResetPeripherals();
 
 EXPORT STATUS TDACreateApplication();
 

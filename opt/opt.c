@@ -90,27 +90,24 @@ void free_parser(parser_t *parser) {
  * @param parser Pointer to the parser
  */
 void print_help(parser_t* parser) {
-  printf("usage: %s", parser->name);
-  arg_t *argc = parser->first_arg;
-  while(argc != NULL) {
-    if (argc->opt->args != NULL) printf(" [%s]", argc->opt->args);
-    else printf(" [%s]", argc->opt->argl);
-    argc = (arg_t*)argc->next;
-  }
-
+  printf("usage: %s [command] [option]", parser->name);
   printf("\n\n%s\n\n", parser->description);
-  printf("options:\n");
+  printf("Arguments:\n");
 
-  argc = parser->first_arg;
-  const int buffer_size = 32;
+  arg_t *argc = parser->first_arg;
+  const int buffer_size = 256;
   char buf[buffer_size];
   while(argc != NULL) {
     memset(buf, '\0', buffer_size);
-    if (argc->opt->args != NULL){
-      strcpy(buf, argc->opt->args);
-      strcat(buf, ", ");
+    if (argc->opt->args != NULL) {
+      if (*(argc->opt->args) == '-') strcat(buf, "  ");
+      strcat(buf, argc->opt->args);
+      if (*(argc->opt->args) == '-') strcat(buf, ",");
     }
-    if (argc->opt->argl != NULL) strcat(buf, argc->opt->argl);
+    if (argc->opt->argl != NULL) {
+      if (*(argc->opt->argl) == '-') strcat(buf, "  ");
+      strcat(buf, argc->opt->argl);
+    }
     printf("    %-30s ", buf);
     printf("%s \n", argc->opt->help);
     argc = (arg_t*)argc->next;
@@ -128,11 +125,23 @@ void print_help(parser_t* parser) {
  * @return int 
  */
 int parse(parser_t *parser, int argc, char* argv[]) {
-  if (argc <= 1) return 0;
+  unsigned char option_found = 0;
+  unsigned char missing_value = 0;
+
   for (int idx = 1; idx < argc; idx++) {
     arg_t *arg = parser->first_arg;
+    option_found = 0;
+    missing_value = 0;
     while (arg != NULL) {
       if (is_arg(argv[idx], arg) == OPT_SUCCESS) {
+        option_found = 1;
+        if ((arg->opt->type != OPT_BOOL) && (idx+1 >= argc)) {
+          printf(
+            "\033[0;31mValue expected for option '%s', "
+            "but none provided.\033[0m\n\n", argv[idx]);
+          missing_value = 1;
+          break;
+        }
         switch (arg->opt->type) {
           case OPT_BOOL: {
             // Set the boolean as "True" when present
@@ -174,7 +183,36 @@ int parse(parser_t *parser, int argc, char* argv[]) {
       }
       arg = (arg_t*)arg->next;
     }
+    if (!option_found) {
+      printf("\033[0;31mUnkonwn option: '%s'\033[0m\n\n", argv[idx]);
+    }
+    if (missing_value || !option_found) {
+      print_help(parser);
+      free_parser(parser);
+      exit(1);
+    }
   }
+
+  /** Check for required CLI options */
+  arg_t *arg = parser->first_arg;
+  unsigned int arg_count = 0;
+  while(arg != NULL) {
+    if (arg->opt->required && !arg->is_set) {
+      if (arg_count == 0) printf("\033[0;31mOption ");
+      if (arg->opt->argl != NULL) printf("'%s' ", arg->opt->argl);
+      else printf("'%s' ", arg->opt->args);
+      arg_count++;
+    }
+    arg = (arg_t*) arg->next;
+  }
+  if (arg_count == 1) printf("is required.\033[0m\n\n");
+  else if (arg_count > 1) printf("are required.\033[0m\n\n");
+  if (arg_count != 0) {
+    print_help(parser);
+    free_parser(parser);
+    exit(1);
+  }
+  return OPT_SUCCESS;
 }
 
 
@@ -210,20 +248,18 @@ void* get_option(parser_t *parser, char *cli_arg) {
  *    EOPT_ARG_NO_MATCH : Not matched
  */
 int is_arg(char *cli_arg, arg_t *arg) {
-  // Number of single or double dash at the begining of a CLI
-  // argument
-  int ndash = 0;
-  if (cli_arg[0] == '-') ndash++;
-  if (cli_arg[1] == '-') ndash++;
-
-  int arglen = strlen(cli_arg + ndash);
+  int arglen = strlen(cli_arg);
   int smatch = -1;
   int lmatch = -1;
   if (arg->opt->args != NULL) {
-    smatch = strncmp(cli_arg + ndash, arg->opt->args + 1, arglen);
+    if (strlen(arg->opt->args) == arglen) {
+      smatch = strncmp(cli_arg, arg->opt->args, arglen);
+    }
   }
   if (arg->opt->argl != NULL) {
-    lmatch = strncmp(cli_arg + ndash, arg->opt->argl + 2, arglen);
+    if (strlen(arg->opt->argl) == arglen) {
+      lmatch = strncmp(cli_arg, arg->opt->argl, arglen);
+    }
   }
   if ((smatch == 0) || (lmatch == 0)) return OPT_SUCCESS;
   return EOPT_ARG_NO_MATCH;

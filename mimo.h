@@ -18,7 +18,7 @@
 
 #define PROG_NAME       "mmwave"              // Name of the program
 #define PROG_VERSION    "0.1"                 // Program version
-#define PROG_COPYRIGHT  "Copyright (C) 2022"
+#define PROG_COPYRIGHT  "Copyright (C) 2022 - 2023"
 
 /* Enable development environment
   Status messages are printed. Set to '0' to disable the

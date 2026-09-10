@@ -76,7 +76,7 @@ NetworkRadarDeviceMap_param		gDeviceMapParams;
 NetworkTDA_Obj gNetworkTDA_obj;
 Network_SockObj gNetwork_SockObj;
 pthread_mutex_t gNetwork_Write_cs;
-  
+
 uint32_t TDA_HostIntrThreadLoop[TDA_NUM_CONNECTED_DEVICES_MAX];
 uint32_t TDA_HostIntrExitThread = 0;
 uint32_t TDA_NumOfRunningSPIThreads = 0;
@@ -370,16 +370,15 @@ STATUS Radar_processData(Radar_EthDataPacketPrms *pDataPacket_ptr, uint32_t prmS
   return status;
 }
 
-/** @fn STATUS ethernetConnect(unsigned char *ipAddr, uint32_t configPort, uint32_t deviceMap)
+/** @fn STATUS ethernetConnect(unsigned char *ipAddr, uint32_t configPort)
 *
 *   @brief Configures the Ethernet connection and the port creation
 *   @param[in] ipAddr - pointer to the IP Address of the TDA
 *   @param[in] configPort - configuration port
-*   @param[in] deviceMap - devices to be enabled by the TDA
 *
 *   @return int Success - 0, Failure - Error Code
 */
-STATUS ethernetConnect(unsigned char *ipAddr, uint32_t configPort, uint32_t deviceMap) {
+STATUS ethernetConnect(unsigned char *ipAddr, uint32_t configPort) {
   int32_t status = SYSTEM_LINK_STATUS_SOK;
 
   // Initializing Network parameters
@@ -392,11 +391,11 @@ STATUS ethernetConnect(unsigned char *ipAddr, uint32_t configPort, uint32_t devi
 
   strncpy(gNetworkTDA_obj.ipAddr, ipAddr, strlen(ipAddr));
 
-  //Initializing sockets
-  Network_init();
-
   //Connecting to the server
-  status = ConnectToServer();
+  DEBUG_PRINT("# INFO: Network: Connecting to the server %s:%d ...\n", \
+    gNetworkTDA_obj.ipAddr, gNetworkTDA_obj.serverPort);
+
+  status = Network_connect(&gNetwork_SockObj, gNetworkTDA_obj.ipAddr, gNetworkTDA_obj.serverPort);
   if (status != SYSTEM_LINK_STATUS_SOK) {
     DEBUG_PRINT("# ERROR: Connecting to the server failed\n");
     return SYSTEM_LINK_STATUS_EFAIL;
@@ -462,38 +461,6 @@ STATUS ethernetConnect(unsigned char *ipAddr, uint32_t configPort, uint32_t devi
     }
   }
 
-  //Send the devices to be enabled for configuration and capture
-  status = ConfigureDeviceMap(deviceMap);
-  if (status != SYSTEM_LINK_STATUS_SOK) {
-    DEBUG_PRINT("# ERROR: Configure DeviceMap command failed\n");
-    return SYSTEM_LINK_STATUS_EFAIL;
-  }
-
-  Sleep(50);
-
-  //Initialize the GPIO and other peripherals
-  pDataPacket[4].ackType = ACK_ON_PROCESS;
-  pDataPacket[4].devSelection = 1;
-  status = Radar_formEthDataPacket(&pDataPacket[4], &pDevCtrlPrms[4],
-    CAPTURE_CONFIG_CONNECT, DATA_HEADER_LENGTH,
-    NULL);
-  if (status != SYSTEM_LINK_STATUS_SOK) {
-    DEBUG_PRINT("# ERROR: Ethernet packet formation failed\n");
-    return SYSTEM_LINK_STATUS_EFAIL;
-  }
-
-  /* Create data buffer and print it into file */
-  char tempBuff[2048] = { 0 };
-  int offset = 0;
-  for (unsigned int i = 0; i < pDevCtrlPrms[4].respParamSize; i++) {
-    int j = 0;
-    j = sprintf(&tempBuff[offset], "0x%02X ", pDevCtrlPrms[4].respParam[i]);
-    offset = offset + j;
-  }
-  sprintf(&tempBuff[offset], "\r\n");
-  DEBUG_PRINT("[GN]%s", tempBuff);
-
-  handleDevCtrl((uint8_t*)&pDevCtrlPrms[4].respParam, pDevCtrlPrms[4].respParamSize);
   return status;
 }
 
@@ -506,30 +473,6 @@ STATUS ethernetConnect(unsigned char *ipAddr, uint32_t configPort, uint32_t devi
 */
 STATUS ethernetDisconnect() {
   int32_t status = SYSTEM_LINK_STATUS_SOK;
-  
-  //Deinitialize the GPIO and other peripherals
-  pDataPacket[4].ackType = ACK_ON_RECEIVE;
-  pDataPacket[4].devSelection = 1;
-  status = Radar_formEthDataPacket(&pDataPacket[4], &pDevCtrlPrms[4],
-    CAPTURE_CONFIG_DISCONNECT, DATA_HEADER_LENGTH,
-    NULL);
-  if (status != SYSTEM_LINK_STATUS_SOK) {
-    DEBUG_PRINT("# ERROR: Ethernet packet formation failed\n");
-    return SYSTEM_LINK_STATUS_EFAIL;
-  }
-
-  /* Create data buffer and print it into file */
-  char tempBuff[2048] = { 0 };
-  int offset = 0;
-  for (unsigned int i = 0; i < pDevCtrlPrms[4].respParamSize; i++) {
-    int j = 0;
-    j = sprintf(&tempBuff[offset], "0x%02X ", pDevCtrlPrms[4].respParam[i]);
-    offset = offset + j;
-  }
-  sprintf(&tempBuff[offset], "\r\n");
-  DEBUG_PRINT("[GN]%s", tempBuff);
-
-  handleDevCtrl((uint8_t*)&pDevCtrlPrms[4].respParam, pDevCtrlPrms[4].respParamSize);
 
   // Send the stop trace command to close the trace file
   status = stopTrace();
@@ -538,12 +481,12 @@ STATUS ethernetDisconnect() {
     return SYSTEM_LINK_STATUS_EFAIL;
   }
 
-  Sleep(1000);
+  Sleep(100);
 
   // Disable the Rx thread
   TDA_NetworkThreadRunning = 0;
 
-  Sleep(1000);
+  Sleep(100);
 
   /* Close the socket */
   status = CloseConnection();
@@ -551,13 +494,9 @@ STATUS ethernetDisconnect() {
     return SYSTEM_LINK_STATUS_EFAIL;
   }
 
-  /* Terminates socket operations for all threads */
-  status = Network_deInit();
-
   /* Close the file handle for trace */
   CloseTraceFile();
 
-  // DeleteCriticalSection(&gNetwork_Write_cs);
   pthread_mutex_destroy(&gNetwork_Write_cs);
   return status;
 }
@@ -638,6 +577,79 @@ STATUS ConfigureDeviceMap(uint32_t deviceMap) {
   status = Radar_formEthDataPacket(&pDataPacket[4], &pDevCtrlPrms[4],
     CAPTURE_CONFIG_DEVICE_MAP, DATA_HEADER_LENGTH + sizeof(gDeviceMapParams),
     (uint8_t*)&gDeviceMapParams);
+  if (status != SYSTEM_LINK_STATUS_SOK) {
+    DEBUG_PRINT("# ERROR: Ethernet packet formation failed\n");
+    return SYSTEM_LINK_STATUS_EFAIL;
+  }
+
+  /* Create data buffer and print it into file */
+  char tempBuff[2048] = { 0 };
+  int offset = 0;
+  for (unsigned int i = 0; i < pDevCtrlPrms[4].respParamSize; i++) {
+    int j = 0;
+    j = sprintf(&tempBuff[offset], "0x%02X ", pDevCtrlPrms[4].respParam[i]);
+    offset = offset + j;
+  }
+  sprintf(&tempBuff[offset], "\r\n");
+  DEBUG_PRINT("[GN]%s", tempBuff);
+
+  handleDevCtrl((uint8_t*)&pDevCtrlPrms[4].respParam, pDevCtrlPrms[4].respParamSize);
+  return status;
+}
+
+
+/**
+ * @fn STATUS  ConfigurePeripherals()
+ *
+ * @brief Initialize GPIO and other peripherals
+ *
+ * @return STATUS
+ */
+STATUS ConfigurePeripherals() {
+  int32_t status = SYSTEM_LINK_STATUS_SOK;
+
+  //Initialize the GPIO and other peripherals
+  pDataPacket[4].ackType = ACK_ON_PROCESS;
+  pDataPacket[4].devSelection = 1;
+  status = Radar_formEthDataPacket(&pDataPacket[4], &pDevCtrlPrms[4],
+    CAPTURE_CONFIG_CONNECT, DATA_HEADER_LENGTH,
+    NULL);
+  if (status != SYSTEM_LINK_STATUS_SOK) {
+    DEBUG_PRINT("# ERROR: Ethernet packet formation failed\n");
+    return SYSTEM_LINK_STATUS_EFAIL;
+  }
+
+  /* Create data buffer and print it into file */
+  char tempBuff[2048] = { 0 };
+  int offset = 0;
+  for (unsigned int i = 0; i < pDevCtrlPrms[4].respParamSize; i++) {
+    int j = 0;
+    j = sprintf(&tempBuff[offset], "0x%02X ", pDevCtrlPrms[4].respParam[i]);
+    offset = offset + j;
+  }
+  sprintf(&tempBuff[offset], "\r\n");
+  DEBUG_PRINT("[GN]%s", tempBuff);
+
+  handleDevCtrl((uint8_t*)&pDevCtrlPrms[4].respParam, pDevCtrlPrms[4].respParamSize);
+  return status;
+}
+
+/**
+ * @fn STATUS  ResetPeripherals()
+ *
+ * @brief De-initialize GPIO and other peripherals
+ *
+ * @return STATUS
+ */
+STATUS ResetPeripherals() {
+  int32_t status = SYSTEM_LINK_STATUS_SOK;
+
+  //Deinitialize the GPIO and other peripherals
+  pDataPacket[4].ackType = ACK_ON_RECEIVE;
+  pDataPacket[4].devSelection = 1;
+  status = Radar_formEthDataPacket(&pDataPacket[4], &pDevCtrlPrms[4],
+    CAPTURE_CONFIG_DISCONNECT, DATA_HEADER_LENGTH,
+    NULL);
   if (status != SYSTEM_LINK_STATUS_SOK) {
     DEBUG_PRINT("# ERROR: Ethernet packet formation failed\n");
     return SYSTEM_LINK_STATUS_EFAIL;
